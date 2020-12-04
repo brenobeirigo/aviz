@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8' />
+        <title>Draw GeoJSON points</title>
+        <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+        
+        <script src='https://api.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.js'></script>
+        <script src='https://api.tiles.mapbox.com/mapbox.js/plugins/turf/v2.0.0/turf.min.js' charset='utf-8'></script>
+        <link href='https://api.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
+        <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
+        <style>
+            body {
+                margin:0; padding:0;
+            }
+
+            #map {
+                position:absolute; top:0; bottom:0; width:100%;
+            }
+
+            /* Marker tweaks */
+            .mapboxgl-popup-close-button {
+                display: none;
+            }
+
+            .mapboxgl-popup-content {
+                font: 400 15px/22px 'Source Sans Pro', 'Helvetica Neue', Sans-serif;
+                padding: 0;
+                width: 300px;
+            }
+
+            .mapboxgl-popup-content-wrapper {padding: 1%;}
+
+            .mapboxgl-popup-content h3 {
+                background: #91c949;
+                color: #fff;
+                margin: 0;
+                display: block;
+                text-align: center;
+                padding: 10px;
+                border-radius: 3px 3px 0 0;
+                font-weight: 700;
+                margin-top: -15px;
+            }
+
+            .mapboxgl-popup-content h4 {
+                margin: 0;
+                display: block;
+                padding: 10px;
+                font-weight: 400;
+            }
+
+            .mapboxgl-popup-content div 
+                padding: 10px;
+            }
+
+            .mapboxgl-container .leaflet-marker-icon {
+                cursor: pointer;
+            }
+
+            .mapboxgl-popup-anchor-top > .mapboxgl-popup-content {
+                margin-top: 15px;
+            }
+
+            .mapboxgl-popup-anchor-top > .mapboxgl-popup-tip {
+                border-bottom-color: #91c949;
+            }
+
+            .slidecontainer {
+                width: 100%; /* Width of the outside container */
+            }
+
+            /* The slider itself */
+            .slider {
+                -webkit-appearance: none;  /* Override default CSS styles */
+                appearance: none;
+                width: 100%; /* Full-width */
+                height: 25px; /* Specified height */
+                background: #d3d3d3; /* Grey background */
+                outline: none; /* Remove outline */
+                opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
+                -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+                transition: opacity .2s;
+            }
+
+            /* Mouse-over effects */
+            .slider:hover {
+                opacity: 1; /* Fully shown on mouse-over */
+            }
+
+            /* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */ 
+            .slider::-webkit-slider-thumb {
+                -webkit-appearance: none; /* Override default look */
+                appearance: none;
+                width: 25px; /* Set a specific slider handle width */
+                height: 25px; /* Slider handle height */
+                background: #4CAF50; /* Green background */
+                cursor: pointer; /* Cursor on hover */
+            }
+
+            .slider::-moz-range-thumb {
+                width: 25px; /* Set a specific slider handle width */
+                height: 25px; /* Slider handle height */
+                background: #4CAF50; /* Green background */
+                cursor: pointer; /* Cursor on hover */
+            }
+
+            #menu {
+                background: #fff;
+                position: absolute;
+                z-index: 1;
+                top: 10px;
+                right: 10px;
+                border-radius: 3px;
+                width: 120px;
+                border: 1px solid rgba(0,0,0,0.4);
+                font-family: 'Open Sans', sans-serif;
+            }
+            
+            #menu a {
+                font-size: 13px;
+                color: #404040;
+                display: block;
+                margin: 0;
+                padding: 0;
+                padding: 10px;
+                text-decoration: none;
+                border-bottom: 1px solid rgba(0,0,0,0.25);
+                text-align: center;
+            }
+            
+            #menu a:last-child {
+                border: none;
+            }
+            
+            #menu a:hover {
+                background-color: #f8f8f8;
+                color: #404040;
+            }
+            
+            #menu a.active {
+                background-color: #3887be;
+                color: #ffffff;
+            }
+            
+            #menu a.active:hover {
+                background: #3074a4;
+            }
+
+            .map-overlay {
+                font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+                position: absolute;
+                width: 25%;
+                top: 0;
+                left: 0;
+                padding: 10px;
+            }
+            
+            .map-overlay .map-overlay-inner {
+                background-color: #fff;
+                box-shadow:0 1px 2px rgba(0, 0, 0, 0.20);
+                border-radius: 3px;
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+            
+            .map-overlay h2 {
+                line-height: 24px;
+                display: block;
+                margin: 0 0 10px;
+            }
+            
+            .map-overlay .legend .bar {
+                height: 10px;
+                width: 100%;
+                background: linear-gradient(to right, #FCA107, #7F3121);
+            }
+            
+            .map-overlay input {
+                background-color: transparent;
+                display: inline-block;
+                width: 100%;
+                position: relative;
+                margin: 0;
+                cursor: ew-resize;
+            }
+
+        </style>
+    </head>
+    <body>
+        <nav id="menu"></nav>
+        <div id="map"></div>
+        <!--
+        <div class='map-overlay top'>
+            <div class='map-overlay-inner'>
+                <h2>Speed: </h2><h2 id='month'></h2>
+                <input id='slider' class="slider" type='range' min='0' max='1000' step='1' value='0' />
+            </div>
+        </div>
+
+        -->
+        <script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>
+
+        <script>
+            //var slider = document.getElementById("myRange");
+            //var output = document.getElementById("demo");
+            //output.innerHTML = slider.value; // Display the default slider value
+
+            mapboxgl.accessToken = 'pk.eyJ1IjoiYnJlbm9iZWlyaWdvIiwiYSI6ImNpeHJiMDNidTAwMm0zNHFpcXVzd2UycHgifQ.tWIDAiRhjSzp1Bd40rxaHw';
+
+            var map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/brenobeirigo/cjrjc79t00a3s2so32n11zu6b',
+                zoom: 0,
+                center: [-74.000123, 40.730431],
+                pitch: 60, // pitch in degrees
+                bearing: -60 // bearing in degrees
+            });
+
+            var acceleration = 50;
+
+            /*
+
+
+            // Update the current slider value (each time you drag the slider handle)
+            var output = document.getElementById("month");
+            var slider = document.getElementById("slider");
+            output.innerHTML = acceleration;
+            slider.value = acceleration;
+
+            document.getElementById('slider').addEventListener('input', function(e) {
+            acceleration = parseInt(e.target.value, 10);
+            output.innerHTML = acceleration;
+            });
+            */
+
+
+            var source_gson = 'http://localhost:2999/all.geojson';
+
+            //var source_gson = 'http://localhost:2999/traces/V1.geojson';
+            //var source_gson = 'http://localhost:3000/traces/week_capacity10.geojson';
+            
+            map.on('load', function () {
+                // We use D3 to fetch the JSON here so that we can parse and use it separately
+                // from GL JS's use in the added source. You can use any request method (library
+                // or otherwise) that you want.
+                d3.json(source_gson, function(err, data) {
+
+                        // Setup our svg layer that we can manipulate with d3
+                    var container = map.getCanvasContainer();
+                    var svg = d3.select(container).append("svg");
+                    var width = 1024;
+                    var circSize = Math.min(75, 75*width / 1280);
+                    svg.append("circle")
+                        .attr("class", "exampleGlow")
+                        .attr("cx", width/4)
+                        .attr("cy", 0)
+                        .attr("r", circSize)
+                        .style("fill", "#CC333F");
+
+
+                    if (err) throw err;
+
+                    var leg = 0;
+                    // save full coordinate list for later
+
+                    var geojson = {
+                        "name":"NewFeatureType",
+                        "type":"FeatureCollection",
+                        "features":[]
+                    };
+
+                    var currentPath = null;
+
+                    var geojsonNodes = {
+                        "name":"NewFeatureType",
+                        "type":"FeatureCollection",
+                        "features":[]
+                    };
+                    
+                    // add it to the map
+                    map.addSource('trace', { type: 'geojson', data: geojson });
+
+                    // add it to the map
+                    map.addSource('nodes', { type: 'geojson', data: geojsonNodes });
+                    
+                    var minLineWidth = 2;
+                    var maxLineWidth = 7;
+
+                    var minLineOpacity = 0.2;
+                    var maxLineOpacity = 0.8;
+                    
+                    //TODO what happens when we have target -> target?
+
+                    // Vehicle route
+                    map.addLayer({
+                        "id": "trace",
+                        "type": "line",
+                        "source": "trace",
+                        "layout": {
+                            "line-join": "round",
+                            "line-cap": "round"
+                            },
+                        "paint": {
+                        "line-color":
+                            [
+                                'case',
+                                ["==",  ['get', 'to'], "target"], 
+                                "#FF0000", "#FF0000"
+                            ], 
+                            "line-opacity":[
+                                'case',
+                                ["==",
+                                    ['get', 'to'],
+                                    "target"
+                                ], 
+                                minLineOpacity, 
+                                [
+                                '+', 
+                                    ['*',
+                                        ['/', 
+                                            ['get', 'load'],
+                                            ['get', 'capacity']
+                                        ],
+                                        maxLineOpacity - minLineOpacity
+                                    ],
+                                    minLineOpacity
+                                ]
+                            ],
+                        "line-width": [
+                            'case',
+                                ["==",
+                                    ['get', 'to'],
+                                    "target"
+                                ], 
+                                maxLineWidth,[
+                                    'case',
+                                        ["==",
+                                            ['get', 'load'],
+                                            0
+                                        ], 
+                                    0, 
+                                    [
+                                    '+', 
+                                        ['*',
+                                            ['/', 
+                                                ['get', 'number_of_requests'],
+                                                ['get', 'capacity']
+                                            ],
+                                            maxLineWidth-minLineWidth
+                                        ],
+                                        minLineWidth
+                                    ]
+                                ]
+                            ]
+                        }}
+                    );
+
+                    var minPointSize = 4;
+                    var maxPointSize = 8;
+                    var targetCircleRadius = 40;
+                    var targetCircleOpacity = 0.3;
+                    var targetCircleColor = '#FF0000';
+
+                    var rangePointSize = maxPointSize - minPointSize;
+                    var pointStyle = {
+                        radius: {
+                            origin:10,
+                            pickup:minPointSize,
+                            destination:maxPointSize,
+                            target:targetCircleRadius,
+                            stop: 10,
+                            middle:maxPointSize
+                            },
+                        color: {
+                            business: {light:"#fcc777", dark:"#f8a51b"},
+                            standard: {light:"#bd7cb4", dark:"#a3218e"},
+                            lowcost: {light:"#56c4c5", dark:"#00acac"}
+                        }
+                    };
+
+                    // Layer containing the customer ODs
+                    map.addLayer({
+                        "id": "nodes",
+                        "type": "circle",
+                        "source": "nodes",
+                        "paint": {
+                        "circle-radius": [
+                            'match',
+                            ['get', 'type'],
+                            'origin', pointStyle.radius.origin,
+                            'pickup', pointStyle.radius.pickup,
+                            'destination', pointStyle.radius.destination,
+                            'target', pointStyle.radius.target,
+                            'stop', pointStyle.radius.stop,
+                            'middle', pointStyle.radius.middle,
+                            /* other */ 6
+                        ],
+                        'circle-opacity': [
+                            'match',
+                            ['get', 'type'],
+                            'target', targetCircleOpacity,
+                            'pickup', 1,
+                            'destination',0.5,
+                            /* other */ 0.5],
+                        'circle-color': [
+                            'match',
+                            ['get', 'type'],
+                            'origin', '#FFFFFF',
+                            'pickup',  [
+                                'match',
+                                ['get', 'user_class'],
+                                'A', pointStyle.color.business.dark,
+                                'B', pointStyle.color.standard.dark,
+                                'C', pointStyle.color.lowcost.dark,
+                                /* other */ '#00ff00'],
+                            'destination', [
+                                'match',
+                                ['get', 'user_class'],
+                                'A', pointStyle.color.business.dark,
+                                'B', pointStyle.color.standard.dark,
+                                'C', pointStyle.color.lowcost.dark,
+                                /* other */ '#00ff00'],
+                            'target', targetCircleColor,
+                            'stop', '#FF0000',
+                            'middle', '#FF0000',
+                            /* other */ '#ccc'
+                        ]
+                        }
+                    });
+
+                    function isFeaturePoint(f){
+                        return data.features[leg].geometry.type == "Point";
+                    }
+
+                    function animatePoint(previous, current, next) {
+                        // Update point geometry to a new position based on counter denoting
+                        // the index to access the arc.
+                        point.features[0].geometry.coordinates = current;
+                        
+                        // Calculate the bearing to ensure the icon is rotated to match the route arc
+                        // The bearing is calculate between the current point and the next point, except
+                        // at the end of the arc use the previous point and the current point
+                        point.features[0].properties.bearing = turf.bearing(
+                        turf.point(previous),
+                        turf.point(next)
+                        );
+                        
+                        // Update the source with this new data.
+                        map.getSource('point').setData(point);
+                    }
+                
+
+                    function getCoordinate(f, i){
+                        if(isFeaturePoint(f)){
+                            return data.features[f].geometry.coordinates;
+                        } else {
+                            return data.features[f].geometry.coordinates[i];
+                        }
+                    }
+
+                    console.log(data.features[leg]);
+                    console.log(data.features[leg].geometry.coordinates);
+                    
+                    // Vehicle origin
+                    var firstLocation = getCoordinate(leg, 0);
+
+                    // A single point that animates along the route.
+                    // Coordinates are initially set to origin.
+                    var point = {
+                        "type": "FeatureCollection",
+                        "features": [{
+                            "type": "Feature",
+                            "properties": {},
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": firstLocation
+                            }
+                        }]
+                    };
+
+                    // add it to the map
+                    map.addSource('point', { type: 'geojson', data: point });
+
+                    var previous = firstLocation;
+                    var current = previous;
+                    var next = current;           
+
+                    // Adding red arrow representing vehicle
+                    map.loadImage('http://localhost:2999/img/red_arrow_up.png', function(error, image) {
+                        if (error) throw error;
+                        map.addImage('cat', image);
+                        map.addLayer({
+                            "id": "point",
+                            "type": "symbol",
+                            "source":  "point",
+                            "layout": {
+                            "icon-image": "cat",
+                            "icon-size": 1.0,
+                            "icon-rotate": ["get", "bearing"],
+                            "icon-rotation-alignment": "map",
+                            "icon-allow-overlap": true,
+                            "icon-ignore-placement": true
+                            }
+                        });
+                    });
+
+                    // Read node information to create info popup
+                    function getNodeInfo(node){
+                        var type = node.properties.type;
+                        var arrival = node.properties.arrival;
+                        var departure = node.properties.departure;
+                        var earliest = node.properties.earliest;
+                        var latest = node.properties.latest;
+                        var userId = node.properties.user_id;
+                        var networkId = node.properties.network_id;
+                        var nodeId = node.properties.id;
+                        var load = node.properties.load;
+                        var str ="";
+                        if(type != "middle")
+                            str+= "<h3>"+userId+"</h3>";
+                        else{
+                            str+= "<h3>New assignment</h3>";
+                        }
+                        str += "<h4><table><tr>";
+                        if(type != "middle")
+                            str+="<td align='right'><b>Placement:</b></td> <td>"+earliest+"</br></td></tr><tr>";
+                        str+="<td align='right'><b>Arrival:</b></td> <td>"+arrival+"</br></td></tr><tr>";
+                        if(type != "middle")
+                            str+="<td align='right'><b>Latest:</b></td> <td>"+latest+"</br></td></tr><tr>";
+                        str+="<td align='right'><b>Type:</b></td> <td>"+type+"</br></td></tr><tr>";
+                        str+="<td align='right'><b>Node id:</b></td> <td>"+nodeId+"</td>";
+                        str += "</tr></table></h4>";
+
+                        return str;
+                    }
+
+                    // Change the cursor to a pointer when the mouse is over the nodes layer
+                    map.on('mouseenter', 'nodes', function () {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
+                    
+                    // Change it back to a pointer when it leaves
+                    map.on('mouseleave', 'nodes', function () {
+                        map.getCanvas().style.cursor = '';
+                    });
+
+                    map.on('click', function(e) {
+
+                        var features = map.queryRenderedFeatures(e.point, {
+                            layers: ['nodes'] // replace this with the name of the layer
+                        });
+
+                        if (!features.length) {
+                            return;
+                        }
+
+                        var feature = features[0];
+
+                        var popup = new mapboxgl.Popup({ offset: [0, -15] })
+                            .setLngLat(feature.geometry.coordinates)
+                            .setHTML(getNodeInfo(feature))
+                            .addTo(map);
+                    });
+
+                    // setup the viewport
+                    map.jumpTo({ 'center': firstLocation, 'zoom': 13 });
+                    map.setPitch(30);
+                    
+                    // on a regular basis, add more coordinates from the saved list and update the map
+                    var i = 0;
+                    var speed = 1000;
+                    var relocating = false;
+                    var timer = window.setInterval(function() {
+
+                        if(leg < data.features.length){
+                            
+                            // Is the feature a node?
+                            if(isFeaturePoint(leg)){
+                                var node = data.features[leg];
+                                var target = null;
+                                var rebalancingLine = null;
+                                
+                                // Update target node
+                                if(leg+2 < data.features.length && data.features[leg+2].properties.type == "target"){
+                                    target = data.features[leg+2];
+                                    rebalancingLine = data.features[leg+1];
+                                }
+                                
+                                // Add point if it is not a stop point
+                                if (node.properties.type != "stop"){
+                                    geojsonNodes.features.push(node);
+                                    
+                                    // Updating node
+                                    map.getSource('nodes').setData(geojsonNodes);
+                                    
+                                }else{
+                                    //TODO increase point to represent idleness in stop point
+                                }
+
+                                // Checking if there is a target node ahead
+                                if(target != null){
+
+                                    relocating = true;
+
+                                    console.log("Addressing target!");
+                                    console.log(rebalancingLine);
+
+                                    var directLine = [];
+
+                                    //Connect with direct line
+                                    var o = rebalancingLine.geometry.coordinates[0];
+                                    var d = rebalancingLine.geometry.coordinates[rebalancingLine.geometry.coordinates.length-1];
+                                    directLine.push(o);
+                                    directLine.push(d);
+                                    console.log(o + " - " + d + " - " + directLine);
+                                    
+                                    rebalancingLine.geometry.coordinates = directLine;
+
+                                    geojsonNodes.features.push(target);
+                                    geojson.features.push(rebalancingLine);
+                                    map.getSource('trace').setData(geojson);
+                                    map.getSource('nodes').setData(geojsonNodes);
+                                    i = 0;
+                                    // go to next feature (skip rebalancing path and target)
+                                    leg+=3;
+
+                                }else{
+                                    i = 0;
+                                    // go to next feature (skip)
+                                    leg++;
+                                }
+                                        
+                            
+                                
+                            } else {
+
+                                var path = data.features[leg];
+
+                                if(i==0){
+                                    currentPath = path.geometry.coordinates;
+                                    path.geometry.coordinates = [];
+                                    geojson.features.push(path);
+                                }
+
+                                // Feature is a line. Show step by step.
+                                var coordinates = currentPath;
+                                var load = path.properties.load;
+                                var duration = path.properties.distance_s;
+                                var capacity = path.properties.capacity;
+                                duration = parseInt(duration, 10);
+                                speed = duration/coordinates.length;
+
+                                //console.log(duration + "-" + speed);
+                                //console.log(load + "-" + capacity);
+
+                                var lastPathId = geojson.features.length -1;
+
+                                if (i < coordinates.length) {
+                                    
+                                    next = i < coordinates.length -1? coordinates[i+1]: current;
+                                    animatePoint(previous, current, next);
+                                    previous = current;
+                                    geojson.features[lastPathId].geometry.coordinates.push(coordinates[i]);
+                                    
+                                    if(relocating){
+                                        //Updating the line origin when rebalancing
+                                        geojson.features[geojson.features.length-2].geometry.coordinates[0] = coordinates[i];
+                                    }
+                                    
+                                    map.getSource('trace').setData(geojson);
+                                    //map.panTo(coordinates[i]);
+                                    i++;
+                                    current = i < coordinates.length? coordinates[i]:current;
+
+
+                                } else {
+                                    // End processing line, can go to next feature
+                                    i = 0;
+                                    leg++;
+                                    if(relocating){
+
+                                        // Remove relocation path and target
+                                        geojson.features.splice(geojson.features.length-2, 1);
+                                        geojsonNodes.features.splice(geojsonNodes.features.length-1, 1);
+                                        map.getSource('trace').setData(geojson);
+                                        map.getSource('nodes').setData(geojsonNodes);
+                                        relocating = false;
+                                    }
+                                }
+                            }
+                        } else {
+                            //Stop when all features are processed
+                            window.clearInterval(timer);
+                        }
+                    }, speed/acceleration);
+                });
+
+            var toggleableLayerIds = [ 'trace', 'nodes' ];
+            
+            for (var i = 0; i < toggleableLayerIds.length; i++) {
+                var id = toggleableLayerIds[i];
+
+                var link = document.createElement('a');
+                link.href = '#';
+                link.className = 'active';
+                link.textContent = id;
+                
+                link.onclick = function (e) {
+                    var clickedLayer = this.textContent;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    var visibility = map.getLayoutProperty(clickedLayer, 'visibility');
+                    
+                    if (visibility === 'visible') {
+                        map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+                        this.className = '';
+                    } else {
+                        this.className = 'active';
+                        map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+                    }
+                };
+                
+                var layers = document.getElementById('menu');
+                layers.appendChild(link);
+            }
+            });
+
+        </script>
+    
+    </body>
+</html>
