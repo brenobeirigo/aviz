@@ -505,34 +505,38 @@
                         });
                     });
 
-                    // Read node information to create info popup
-                    function getNodeInfo(node){
-                        var type = node.properties.type;
-                        var arrival = node.properties.arrival;
-                        var departure = node.properties.departure;
-                        var earliest = node.properties.earliest;
-                        var latest = node.properties.latest;
-                        var userId = node.properties.user_id;
-                        var networkId = node.properties.network_id;
-                        var nodeId = node.properties.id;
-                        var load = node.properties.load;
-                        var str ="";
-                        if(type != "middle")
-                            str+= "<h3>"+userId+"</h3>";
-                        else{
-                            str+= "<h3>New assignment</h3>";
-                        }
-                        str += "<h4><table><tr>";
-                        if(type != "middle")
-                            str+="<td align='right'><b>Placement:</b></td> <td>"+earliest+"</br></td></tr><tr>";
-                        str+="<td align='right'><b>Arrival:</b></td> <td>"+arrival+"</br></td></tr><tr>";
-                        if(type != "middle")
-                            str+="<td align='right'><b>Latest:</b></td> <td>"+latest+"</br></td></tr><tr>";
-                        str+="<td align='right'><b>Type:</b></td> <td>"+type+"</br></td></tr><tr>";
-                        str+="<td align='right'><b>Node id:</b></td> <td>"+nodeId+"</td>";
-                        str += "</tr></table></h4>";
+                    class Node{
 
-                        return str;
+                        constructor(node){
+                            this.type = node.properties.type;
+                            this.arrival = node.properties.arrival;
+                            this.departure = node.properties.departure;
+                            this.earliest = node.properties.earliest;
+                            this.latest = node.properties.latest;
+                            this.userId = node.properties.user_id;
+                            this.networkId = node.properties.network_id;
+                            this.nodeId = node.properties.id;
+                            this.load = node.properties.load;
+                        }
+
+                        get popup(){
+                            let str = "";
+                            if (this.type != "middle")
+                                str += "<h3>" + this.userId + "</h3>";
+                            else {
+                                str += "<h3>New assignment</h3>";
+                            }
+                            str += "<h4><table><tr>";
+                            if (this.type != "middle")
+                                str += "<td align='right'><b>Placement:</b></td> <td>" + this.earliest + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
+                            if (this.type != "middle")
+                                str += "<td align='right'><b>Latest:</b></td> <td>" + this.latest + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
+                            str += "</tr></table></h4>";
+                            return str;
+                        }
                     }
 
                     // Change the cursor to a pointer when the mouse is over the nodes layer
@@ -557,9 +561,11 @@
 
                         var feature = features[0];
 
+                        var node = new Node(feature);
+
                         var popup = new mapboxgl.Popup({ offset: [0, -15] })
                             .setLngLat(feature.geometry.coordinates)
-                            .setHTML(getNodeInfo(feature))
+                            .setHTML(node.popup)
                             .addTo(map);
                     });
 
