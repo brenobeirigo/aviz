@@ -75,30 +75,12 @@
                 var speed = 1000;
 
 
-                // A single point that animates along the route.
+                // A single geojsonVehicles that animates along the route.
                 // Coordinates are initially set to origin.
-                var point = {
+                var geojsonVehicles = {
                     "type": "FeatureCollection",
                     "features": []
                 };
-
-                function animatePoint(id, previous, current, next) {
-                    console.log(id + " - " + previous + " - " + current + " - " + next + " - " + point.features[id])
-                    // Update point geometry to a new position based on counter denoting
-                    // the index to access the arc.
-                    point.features[id].geometry.coordinates = current;
-
-                    // Calculate the bearing to ensure the icon is rotated to match the route arc
-                    // The bearing is calculate between the current point and the next point, except
-                    // at the end of the arc use the previous point and the current point
-                    point.features[id].properties.bearing = turf.bearing(
-                        turf.point(previous),
-                        turf.point(next)
-                    );
-                    console.log(point.features[id]);
-                }
-                
-
 
                 // We use D3 to fetch the JSON here so that we can parse and use it separately
                 // from GL JS's use in the added source. You can use any request method (library
@@ -107,7 +89,8 @@
                 class Trace{
                     constructor(traces){
                         this.traces = traces;
-                        this.coordinates = traces.geometry.coordinates;                        
+                        this.coordinates = traces.geometry.coordinates;    
+                        this.indexCurrentCoord = 0;                    
                     }
                 }
 
@@ -145,34 +128,33 @@
                 class Vehicle{
                     constructor(id, geojson){
                         this.id = id,
-                        this.route = geojson.features;
+                        this.features = geojson.features;
                         this.leg = 0;
                         this.firstLocation = this.getCoordinate(this.leg, 0);
                         this.previous = this.firstLocation;
                         this.current = this.previous;
                         this.next = this.current;
-                        this.i = 0;
                         this.isRebalancing = false;
                         this.relocatingIndex = 0;
                         this.rebOrigin = null;
                         this.targetNode = null;
                         this.nodes = [];
-                        this.paths = [];
-                        this.currentTrace = null;
+                        this.incrementalRoute = [];
+                        this.route = null;
                         this.curretPath = null;
                     }
 
                     isFeaturePoint() {
-                        return this.route[this.leg].geometry.type == "Point";
+                        return this.features[this.leg].geometry.type == "Point";
                     }
                     getNextNode(){
-                        return (this.leg + 2 < this.route.length? this.route[this.leg + 2]:null);
+                        return (this.leg + 2 < this.features.length? this.features[this.leg + 2]:null);
                     }
                     nextNodeIsTarget(){
-                        return this.leg + 2 < this.route.length && this.route[this.leg + 2].properties.type == "target";
+                        return this.leg + 2 < this.features.length && this.features[this.leg + 2].properties.type == "target";
                     }
                     getCurrentNode(){
-                        return this.route[this.leg];
+                        return this.features[this.leg];
                     }
                     processNode(){
                         var node = this.getCurrentNode();
@@ -187,64 +169,63 @@
                             
                             this.nodes.push(nextNode);
 
-                            var rebalancingLine = this.route[this.leg + 1];
-                            this.currentTrace = new TraceRebalancing(rebalancingLine);
-                            this.paths.push(this.currentTrace.od);
+                            var rebalancingLine = this.features[this.leg + 1];
+                            this.route = new TraceRebalancing(rebalancingLine);
+                            this.incrementalRoute.push(this.route.od);
 
                             this.isRebalancing = true;
 
                             this.targetNode = this.nodes[this.nodes.length - 1];
-                            this.rebOrigin = this.paths[this.paths.length - 1];
-                            this.i = 0;
+                            this.rebOrigin = this.incrementalRoute[this.incrementalRoute.length - 1];
                             // go to next feature (skip rebalancing path and target)
                             this.leg += 3;
 
                     
                         } else {
-                            this.i = 0;
+                            this.route = new Trace(this.features[this.leg + 1]);
                             // go to next feature (skip)
                             this.leg++;
                         }
                     }
 
-                    processTrace(){
-                        var path = this.route[this.leg];
-                        
-                        if (this.i == 0) {
+                    startIncrementalRoute(){
+                        if (this.route.indexCurrentCoord == 0) {
+                            var path = this.features[this.leg];
                             this.currentPath = path.geometry.coordinates;
                             path.geometry.coordinates = [];
-                            //console.log("path:" + path.geometry.coordinates.length + "current:" + this.currentPath.length);
-                            this.paths.push(path);
+                            this.incrementalRoute.push(path);
                         }
+                    }
 
-                        // Feature is a line. Show step by step.
-                        var coordinates = this.currentPath;
-                        var load = path.properties.load;
-                        var duration = path.properties.distance_s;
-                        var capacity = path.properties.capacity;
-                        duration = parseInt(duration, 10);
+                    processTrace(){
 
-                        if (this.i < coordinates.length) {
-                            //console.log("coord:" + coordinates.length + " - Coordinates:" + path.geometry.coordinates.length + " - i:" + this.i);
+                        this.startIncrementalRoute();
 
-                            this.next = this.i < coordinates.length - 1 ? coordinates[this.i + 1] : this.current;
+                        //var load = path.properties.load;
+                        //var duration = path.properties.distance_s;
+                        //var capacity = path.properties.capacity;
+                        //duration = parseInt(duration, 10);
 
+                        if (this.route.indexCurrentCoord < this.currentPath.length) {
+                            
                             this.updateCurrentPosition();
                             this.updateBearing();
-                            this.addCoordinatesToPath(coordinates[this.i]);
-                            this.previous = this.current;
+                            this.addCoordinatesToPath(this.currentPath[this.route.indexCurrentCoord]);
                             
                             if (this.isRebalancing) {
-                                this.updateRelocationGuideLineOrigin(coordinates[this.i]);
+                                this.updateRelocationGuideLineOrigin(this.currentPath[this.route.indexCurrentCoord]);
                             }
                             
                             //map.panTo(coordinates[i]);
-                            this.i++;
-                            this.current = this.i < coordinates.length ? coordinates[this.i] : this.current;
+                            
+                            this.previous = this.current;
+                            this.next = this.route.indexCurrentCoord < this.currentPath.length - 1 ? this.currentPath[this.route.indexCurrentCoord + 1] : this.current;
+                            this.route.indexCurrentCoord++;
+                            this.current = this.route.indexCurrentCoord < this.currentPath.length ? this.currentPath[this.route.indexCurrentCoord] : this.current;
 
                         } else {
                             // End processing line, can go to next feature
-                            this.i = 0;
+                            this.route.indexCurrentCoord = 0;
                             this.leg++;
 
                             if (this.isRebalancing) {
@@ -254,15 +235,15 @@
                     }
 
                     updateCurrentPosition(){
-                        point.features[this.id].geometry.coordinates = this.current;
+                        geojsonVehicles.features[this.id].geometry.coordinates = this.current;
                     }
 
                     addCoordinatesToPath(coords){
-                        this.paths[this.paths.length - 1].geometry.coordinates.push(coords);
+                        this.incrementalRoute[this.incrementalRoute.length - 1].geometry.coordinates.push(coords);
                     }
 
                     updateBearing(){
-                        point.features[this.id].properties.bearing = turf.bearing(
+                        geojsonVehicles.features[this.id].properties.bearing = turf.bearing(
                             turf.point(this.previous),
                             turf.point(this.next)
                         );
@@ -270,19 +251,19 @@
 
                     updateRelocationGuideLineOrigin(o){
                         //Updating the line origin when rebalancing
-                        this.currentTrace.o = o;
+                        this.route.o = o;
                     }
                     
                     stopRelocating(){
                         // Remove relocation path and target
-                        this.paths.splice(this.paths.length - 2, 1);
+                        this.incrementalRoute.splice(this.incrementalRoute.length - 2, 1);
                         this.nodes.splice(this.nodes.length - 1, 1);
                         this.isRebalancing = false;
                     }
 
                     update(timer){
 
-                        if (this.leg < this.route.length) {
+                        if (this.leg < this.features.length) {
 
                             if (this.isFeaturePoint()) {
                                 this.processNode();
@@ -297,9 +278,9 @@
 
                     getCoordinate(f, i) {
                         if (this.isFeaturePoint(f)) {
-                            return this.route[f].geometry.coordinates;
+                            return this.features[f].geometry.coordinates;
                         } else {
-                            return this.route[f].geometry.coordinates[i];
+                            return this.features[f].geometry.coordinates[i];
                         }
                     }
                 }
@@ -483,11 +464,11 @@
                                 "coordinates": v.firstLocation
                             }
                         };
-                        point.features.push(f);
+                        geojsonVehicles.features.push(f);
                     }
 
                     // add it to the map
-                    map.addSource('point', { type: 'geojson', data: point});
+                    map.addSource('point', { type: 'geojson', data: geojsonVehicles});
          
                     // Adding red arrow representing vehicle
                     map.loadImage('img/red_arrow_up.png', function(error, image) {
@@ -611,7 +592,7 @@
                         let nodes = [];
                         for (v of fleet){
                             v.update(timer);
-                            Array.prototype.push.apply(paths, v.paths);
+                            Array.prototype.push.apply(paths, v.incrementalRoute);
                             Array.prototype.push.apply(nodes, v.nodes);
                         }
                         geojsonTraces.features = paths;
@@ -619,7 +600,7 @@
                         map.getSource('trace').setData(geojsonTraces);
                         map.getSource('nodes').setData(geojsonNodes);
                         // Update the source with this new data.
-                        map.getSource('point').setData(point);
+                        map.getSource('point').setData(geojsonVehicles);
 
                     }, speed/acceleration);
                 });
