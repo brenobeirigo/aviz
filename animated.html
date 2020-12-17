@@ -235,53 +235,237 @@
             */
 
 
-            var source_gson = 'http://localhost:2999/all.geojson';
+            //var source_gson = 'all.geojson';
+            //var source_gson2 = 'all2.geojson';
+            var source_gson = '2v.json';
 
             //var source_gson = 'http://localhost:2999/traces/V1.geojson';
             //var source_gson = 'http://localhost:3000/traces/week_capacity10.geojson';
             
             map.on('load', function () {
+
+                var geojsonTraces = {
+                    "name": "NewFeatureType",
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+
+                var currentPath = null;
+
+                var geojsonNodes = {
+                    "name": "NewFeatureType",
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+
+                // on a regular basis, add more coordinates from the saved list and update the map
+                var speed = 1000;
+
+
+                // A single point that animates along the route.
+                // Coordinates are initially set to origin.
+                var point = {
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+
+                function animatePoint(id, previous, current, next) {
+                    console.log(id + " - " + previous + " - " + current + " - " + next + " - " + point.features[id])
+                    // Update point geometry to a new position based on counter denoting
+                    // the index to access the arc.
+                    point.features[id].geometry.coordinates = current;
+
+                    // Calculate the bearing to ensure the icon is rotated to match the route arc
+                    // The bearing is calculate between the current point and the next point, except
+                    // at the end of the arc use the previous point and the current point
+                    point.features[id].properties.bearing = turf.bearing(
+                        turf.point(previous),
+                        turf.point(next)
+                    );
+                    console.log(point.features[id]);
+                }
+                
+
+
                 // We use D3 to fetch the JSON here so that we can parse and use it separately
                 // from GL JS's use in the added source. You can use any request method (library
                 // or otherwise) that you want.
+                
+                class Vehicle{
+                    constructor(id, geojson){
+                        this.id = id,
+                        this.route = geojson.features;
+                        this.leg = 0;
+                        this.firstLocation = this.getCoordinate(this.leg, 0);
+                        this.previous = this.firstLocation;
+                        this.current = this.previous;
+                        this.next = this.current;
+                        this.i = 0;
+                        this.relocating = false;
+                        this.relocatingIndex = 0;
+                        this.rebOrigin = null;
+                        this.targetNode = null;
+                        this.nodes = [];
+                        this.paths = [];
+                    }
+
+                    isFeaturePoint(f) {
+                        return this.route[f].geometry.type == "Point";
+                    }
+                    isTarget(){
+                        return this.leg + 2 < this.route.length && this.route[this.leg + 2].properties.type == "target";
+                    }
+
+                    update(timer){
+
+                        if (this.leg < this.route.length) {
+
+                            // Is the feature a node?
+                            if (this.isFeaturePoint(this.leg)) {
+                                var node = this.route[this.leg];
+                                var target = null;
+                                var rebalancingLine = null;
+
+                                // Update target node
+                                if (this.isTarget()) {
+                                    target = this.route[this.leg + 2];
+                                    rebalancingLine = this.route[this.leg + 1];
+                                    
+                                }
+
+                                // Add point if it is not a stop point
+                                if (node.properties.type != "stop") {
+                                    this.nodes.push(node);
+                                } else {
+                                    //TODO increase point to represent idleness in stop point
+                                }
+
+                                // Checking if there is a target node ahead
+                                if (target != null) {
+
+                                    this.relocating = true;
+
+                                    var directLine = [];
+
+                                    //Connect with direct line
+                                    var o = rebalancingLine.geometry.coordinates[0];
+                                    var d = rebalancingLine.geometry.coordinates[rebalancingLine.geometry.coordinates.length - 1];
+                                    directLine.push(o);
+                                    directLine.push(d);
+                                    
+                                    rebalancingLine.geometry.coordinates = directLine;
+
+                                    this.nodes.push(target);
+
+                                    this.targetNode = this.nodes[this.nodes.length - 1];
+
+                                    this.paths.push(rebalancingLine);
+                                    
+                                    this.rebOrigin = this.paths[this.paths.length-1];
+                                    this.i = 0;
+                                    // go to next feature (skip rebalancing path and target)
+                                    this.leg += 3;
+
+                                } else {
+                                    this.i = 0;
+                                    // go to next feature (skip)
+                                    this.leg++;
+                                }
+                            } else {
+
+                                var path = this.route[this.leg];
+
+                                if (this.i == 0) {
+                                    currentPath = path.geometry.coordinates;
+                                    path.geometry.coordinates = [];
+                                    this.paths.push(path);
+                                }
+
+                                // Feature is a line. Show step by step.
+                                var coordinates = currentPath;
+                                var load = path.properties.load;
+                                var duration = path.properties.distance_s;
+                                var capacity = path.properties.capacity;
+                                duration = parseInt(duration, 10);
+
+                                var lastPathId = this.paths.length - 1;
+
+                                if (this.i < coordinates.length) {
+
+                                    this.next = this.i < coordinates.length - 1 ? coordinates[this.i + 1] : this.current;
+                                    
+
+                                    point.features[this.id].geometry.coordinates = this.current;
+
+                                    point.features[this.id].properties.bearing = turf.bearing(
+                                        turf.point(this.previous),
+                                        turf.point(this.next)
+                                    );
+
+                                    this.previous = this.current;
+                                    this.paths[lastPathId].geometry.coordinates.push(coordinates[this.i]);
+
+                                    if (this.relocating) {
+                                        //Updating the line origin when rebalancing
+                                        this.rebOrigin.geometry.coordinates[0] = coordinates[this.i];
+                                    }
+                                    //map.panTo(coordinates[i]);
+                                    this.i++;
+                                    this.current = this.i < coordinates.length ? coordinates[this.i] : this.current;
+
+
+                                } else {
+                                    // End processing line, can go to next feature
+                                    this.i = 0;
+                                    this.leg++;
+                                    if (this.relocating) {
+
+                                        // Remove relocation path and target
+                                        this.paths.splice(this.paths.length - 2, 1);
+                                        this.nodes.splice(this.nodes.length - 1, 1);
+                                        
+                                        this.relocating = false;
+                                    }
+                                }
+                            }
+                        } else {
+                            //Stop when all features are processed
+                            window.clearInterval(timer);
+                        }
+                    }
+
+                    getCoordinate(f, i) {
+                        if (this.isFeaturePoint(f)) {
+                            return this.route[f].geometry.coordinates;
+                        } else {
+                            return this.route[f].geometry.coordinates[i];
+                        }
+                    }
+                }
+
+                function getVehicleListFromData(data){
+                    
+                    fleet = [];
+
+                    for (vehicle of data["routes"]) {
+                        fleet.push(new Vehicle(vehicle["id"], vehicle["path"]));
+                    }
+
+                    fleet.pop();
+
+                    return fleet;
+
+                }
                 d3.json(source_gson, function(err, data) {
 
-                        // Setup our svg layer that we can manipulate with d3
-                    var container = map.getCanvasContainer();
-                    var svg = d3.select(container).append("svg");
-                    var width = 1024;
-                    var circSize = Math.min(75, 75*width / 1280);
-                    svg.append("circle")
-                        .attr("class", "exampleGlow")
-                        .attr("cx", width/4)
-                        .attr("cy", 0)
-                        .attr("r", circSize)
-                        .style("fill", "#CC333F");
+                    fleet = getVehicleListFromData(data);
 
+                    console.log(fleet);
 
                     if (err) throw err;
-
-                    var leg = 0;
-                    // save full coordinate list for later
-
-                    var geojson = {
-                        "name":"NewFeatureType",
-                        "type":"FeatureCollection",
-                        "features":[]
-                    };
-
-                    var currentPath = null;
-
-                    var geojsonNodes = {
-                        "name":"NewFeatureType",
-                        "type":"FeatureCollection",
-                        "features":[]
-                    };
                     
                     // add it to the map
-                    map.addSource('trace', { type: 'geojson', data: geojson });
-
-                    // add it to the map
+                    map.addSource('trace', { type: 'geojson', data: geojsonTraces });
                     map.addSource('nodes', { type: 'geojson', data: geojsonNodes });
                     
                     var minLineWidth = 2;
@@ -429,86 +613,53 @@
                         }
                     });
 
-                    function isFeaturePoint(f){
-                        return data.features[leg].geometry.type == "Point";
-                    }
-
-                    function animatePoint(previous, current, next) {
-                        // Update point geometry to a new position based on counter denoting
-                        // the index to access the arc.
-                        point.features[0].geometry.coordinates = current;
-                        
-                        // Calculate the bearing to ensure the icon is rotated to match the route arc
-                        // The bearing is calculate between the current point and the next point, except
-                        // at the end of the arc use the previous point and the current point
-                        point.features[0].properties.bearing = turf.bearing(
-                        turf.point(previous),
-                        turf.point(next)
-                        );
-                        
-                        // Update the source with this new data.
-                        map.getSource('point').setData(point);
-                    }
-                
-
-                    function getCoordinate(f, i){
-                        if(isFeaturePoint(f)){
-                            return data.features[f].geometry.coordinates;
-                        } else {
-                            return data.features[f].geometry.coordinates[i];
-                        }
-                    }
-
-                    console.log(data.features[leg]);
-                    console.log(data.features[leg].geometry.coordinates);
-                    
-                    // Vehicle origin
-                    var firstLocation = getCoordinate(leg, 0);
-
-                    // A single point that animates along the route.
-                    // Coordinates are initially set to origin.
-                    var point = {
-                        "type": "FeatureCollection",
-                        "features": [{
+                    for(v of fleet){
+                        let f = {
                             "type": "Feature",
-                            "properties": {},
+                            "properties": { "id": v.id, "status": "rebalancing" },
                             "geometry": {
                                 "type": "Point",
-                                "coordinates": firstLocation
+                                "coordinates": v.firstLocation
                             }
-                        }]
-                    };
+                        };
+                        point.features.push(f);
+                    }
 
                     // add it to the map
-                    map.addSource('point', { type: 'geojson', data: point });
-
-                    var previous = firstLocation;
-                    var current = previous;
-                    var next = current;           
-
+                    map.addSource('point', { type: 'geojson', data: point});
+         
                     // Adding red arrow representing vehicle
-                    map.loadImage('http://localhost:2999/img/red_arrow_up.png', function(error, image) {
+                    map.loadImage('img/red_arrow_up.png', function(error, image) {
                         if (error) throw error;
-                        map.addImage('cat', image);
+                        map.addImage('vehicle', image,  { 'sdf': true });
                         map.addLayer({
                             "id": "point",
                             "type": "symbol",
                             "source":  "point",
                             "layout": {
-                            "icon-image": "cat",
-                            "icon-size": 1.0,
-                            "icon-rotate": ["get", "bearing"],
-                            "icon-rotation-alignment": "map",
-                            "icon-allow-overlap": true,
-                            "icon-ignore-placement": true
+                                "icon-image": "vehicle",
+                                "icon-size": 1.0,
+                                "icon-rotate": ["get", "bearing"],
+                                "icon-rotation-alignment": "map",
+                                "icon-allow-overlap": true,
+                                "icon-ignore-placement": true
+                            },
+                            'paint': {
+                                'icon-color': [
+                                    'match', // Use the 'match' expression: https://docs.mapbox.com/mapbox-gl-js/style-spec/#expressions-match
+                                    ['get', 'status'], // Use the result 'STORE_TYPE' property
+                                    'rebalancing', '#FF0000',
+                                    'carrying', '#00FF00',
+                                    'parked', '#0000FF',
+                                    '#FFFFFF' // any other store type
+                                ]
                             }
                         });
                     });
 
                     class Node{
-
                         constructor(node){
-                            this.type = node.properties.type;
+                            this.type = node.properties.type;    
                             this.arrival = node.properties.arrival;
                             this.departure = node.properties.departure;
                             this.earliest = node.properties.earliest;
@@ -521,21 +672,42 @@
 
                         get popup(){
                             let str = "";
-                            if (this.type != "middle")
-                                str += "<h3>" + this.userId + "</h3>";
-                            else {
-                                str += "<h3>New assignment</h3>";
-                            }
+                            str += "<h3>" + this.userId + "</h3>";
                             str += "<h4><table><tr>";
-                            if (this.type != "middle")
-                                str += "<td align='right'><b>Placement:</b></td> <td>" + this.earliest + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Placement:</b></td> <td>" + this.earliest + "</br></td></tr><tr>";
                             str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
-                            if (this.type != "middle")
-                                str += "<td align='right'><b>Latest:</b></td> <td>" + this.latest + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Latest:</b></td> <td>" + this.latest + "</br></td></tr><tr>";
                             str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
                             str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
                             str += "</tr></table></h4>";
                             return str;
+                        }
+                    }
+
+                    class NodeMiddle extends Node{
+                        constructor(node){
+                            super(node);
+                        }
+                        get popup() {
+                            let str = "";
+                            str += "<h3>New assignment</h3>";
+                            str += "<h4><table><tr>";
+                            str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
+                            str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
+                            str += "</tr></table></h4>";
+                            return str;
+                        }
+                    }
+
+
+                    class NodeFactory {
+                        constructor(node) {
+                            if (node.properties.type === "middle") {
+                                return new NodeMiddle(node);
+                            } else {
+                                return new Node(node);
+                            }
                         }
                     }
 
@@ -561,7 +733,7 @@
 
                         var feature = features[0];
 
-                        var node = new Node(feature);
+                        var node = new NodeFactory(feature);
 
                         var popup = new mapboxgl.Popup({ offset: [0, -15] })
                             .setLngLat(feature.geometry.coordinates)
@@ -570,135 +742,24 @@
                     });
 
                     // setup the viewport
-                    map.jumpTo({ 'center': firstLocation, 'zoom': 13 });
+                    map.jumpTo({ 'center': fleet[0].firstLocation, 'zoom': 13 });
                     map.setPitch(30);
                     
-                    // on a regular basis, add more coordinates from the saved list and update the map
-                    var i = 0;
-                    var speed = 1000;
-                    var relocating = false;
                     var timer = window.setInterval(function() {
-
-                        if(leg < data.features.length){
-                            
-                            // Is the feature a node?
-                            if(isFeaturePoint(leg)){
-                                var node = data.features[leg];
-                                var target = null;
-                                var rebalancingLine = null;
-                                
-                                // Update target node
-                                if(leg+2 < data.features.length && data.features[leg+2].properties.type == "target"){
-                                    target = data.features[leg+2];
-                                    rebalancingLine = data.features[leg+1];
-                                }
-                                
-                                // Add point if it is not a stop point
-                                if (node.properties.type != "stop"){
-                                    geojsonNodes.features.push(node);
-                                    
-                                    // Updating node
-                                    map.getSource('nodes').setData(geojsonNodes);
-                                    
-                                }else{
-                                    //TODO increase point to represent idleness in stop point
-                                }
-
-                                // Checking if there is a target node ahead
-                                if(target != null){
-
-                                    relocating = true;
-
-                                    console.log("Addressing target!");
-                                    console.log(rebalancingLine);
-
-                                    var directLine = [];
-
-                                    //Connect with direct line
-                                    var o = rebalancingLine.geometry.coordinates[0];
-                                    var d = rebalancingLine.geometry.coordinates[rebalancingLine.geometry.coordinates.length-1];
-                                    directLine.push(o);
-                                    directLine.push(d);
-                                    console.log(o + " - " + d + " - " + directLine);
-                                    
-                                    rebalancingLine.geometry.coordinates = directLine;
-
-                                    geojsonNodes.features.push(target);
-                                    geojson.features.push(rebalancingLine);
-                                    map.getSource('trace').setData(geojson);
-                                    map.getSource('nodes').setData(geojsonNodes);
-                                    i = 0;
-                                    // go to next feature (skip rebalancing path and target)
-                                    leg+=3;
-
-                                }else{
-                                    i = 0;
-                                    // go to next feature (skip)
-                                    leg++;
-                                }
-                                        
-                            
-                                
-                            } else {
-
-                                var path = data.features[leg];
-
-                                if(i==0){
-                                    currentPath = path.geometry.coordinates;
-                                    path.geometry.coordinates = [];
-                                    geojson.features.push(path);
-                                }
-
-                                // Feature is a line. Show step by step.
-                                var coordinates = currentPath;
-                                var load = path.properties.load;
-                                var duration = path.properties.distance_s;
-                                var capacity = path.properties.capacity;
-                                duration = parseInt(duration, 10);
-                                speed = duration/coordinates.length;
-
-                                //console.log(duration + "-" + speed);
-                                //console.log(load + "-" + capacity);
-
-                                var lastPathId = geojson.features.length -1;
-
-                                if (i < coordinates.length) {
-                                    
-                                    next = i < coordinates.length -1? coordinates[i+1]: current;
-                                    animatePoint(previous, current, next);
-                                    previous = current;
-                                    geojson.features[lastPathId].geometry.coordinates.push(coordinates[i]);
-                                    
-                                    if(relocating){
-                                        //Updating the line origin when rebalancing
-                                        geojson.features[geojson.features.length-2].geometry.coordinates[0] = coordinates[i];
-                                    }
-                                    
-                                    map.getSource('trace').setData(geojson);
-                                    //map.panTo(coordinates[i]);
-                                    i++;
-                                    current = i < coordinates.length? coordinates[i]:current;
-
-
-                                } else {
-                                    // End processing line, can go to next feature
-                                    i = 0;
-                                    leg++;
-                                    if(relocating){
-
-                                        // Remove relocation path and target
-                                        geojson.features.splice(geojson.features.length-2, 1);
-                                        geojsonNodes.features.splice(geojsonNodes.features.length-1, 1);
-                                        map.getSource('trace').setData(geojson);
-                                        map.getSource('nodes').setData(geojsonNodes);
-                                        relocating = false;
-                                    }
-                                }
-                            }
-                        } else {
-                            //Stop when all features are processed
-                            window.clearInterval(timer);
+                        let paths = [];
+                        let nodes = [];
+                        for (v of fleet){
+                            v.update(timer);
+                            Array.prototype.push.apply(paths, v.paths);
+                            Array.prototype.push.apply(nodes, v.nodes);
                         }
+                        geojsonTraces.features = paths;
+                        geojsonNodes.features = nodes;
+                        map.getSource('trace').setData(geojsonTraces);
+                        map.getSource('nodes').setData(geojsonNodes);
+                        // Update the source with this new data.
+                        map.getSource('point').setData(point);
+
                     }, speed/acceleration);
                 });
 
