@@ -9,196 +9,11 @@
         <script src='https://api.tiles.mapbox.com/mapbox.js/plugins/turf/v2.0.0/turf.min.js' charset='utf-8'></script>
         <link href='https://api.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
         <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
-        <style>
-            body {
-                margin:0; padding:0;
-            }
-
-            #map {
-                position:absolute; top:0; bottom:0; width:100%;
-            }
-
-            /* Marker tweaks */
-            .mapboxgl-popup-close-button {
-                display: none;
-            }
-
-            .mapboxgl-popup-content {
-                font: 400 15px/22px 'Source Sans Pro', 'Helvetica Neue', Sans-serif;
-                padding: 0;
-                width: 300px;
-            }
-
-            .mapboxgl-popup-content-wrapper {padding: 1%;}
-
-            .mapboxgl-popup-content h3 {
-                background: #91c949;
-                color: #fff;
-                margin: 0;
-                display: block;
-                text-align: center;
-                padding: 10px;
-                border-radius: 3px 3px 0 0;
-                font-weight: 700;
-                margin-top: -15px;
-            }
-
-            .mapboxgl-popup-content h4 {
-                margin: 0;
-                display: block;
-                padding: 10px;
-                font-weight: 400;
-            }
-
-            .mapboxgl-popup-content div 
-                padding: 10px;
-            }
-
-            .mapboxgl-container .leaflet-marker-icon {
-                cursor: pointer;
-            }
-
-            .mapboxgl-popup-anchor-top > .mapboxgl-popup-content {
-                margin-top: 15px;
-            }
-
-            .mapboxgl-popup-anchor-top > .mapboxgl-popup-tip {
-                border-bottom-color: #91c949;
-            }
-
-            .slidecontainer {
-                width: 100%; /* Width of the outside container */
-            }
-
-            /* The slider itself */
-            .slider {
-                -webkit-appearance: none;  /* Override default CSS styles */
-                appearance: none;
-                width: 100%; /* Full-width */
-                height: 25px; /* Specified height */
-                background: #d3d3d3; /* Grey background */
-                outline: none; /* Remove outline */
-                opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
-                -webkit-transition: .2s; /* 0.2 seconds transition on hover */
-                transition: opacity .2s;
-            }
-
-            /* Mouse-over effects */
-            .slider:hover {
-                opacity: 1; /* Fully shown on mouse-over */
-            }
-
-            /* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */ 
-            .slider::-webkit-slider-thumb {
-                -webkit-appearance: none; /* Override default look */
-                appearance: none;
-                width: 25px; /* Set a specific slider handle width */
-                height: 25px; /* Slider handle height */
-                background: #4CAF50; /* Green background */
-                cursor: pointer; /* Cursor on hover */
-            }
-
-            .slider::-moz-range-thumb {
-                width: 25px; /* Set a specific slider handle width */
-                height: 25px; /* Slider handle height */
-                background: #4CAF50; /* Green background */
-                cursor: pointer; /* Cursor on hover */
-            }
-
-            #menu {
-                background: #fff;
-                position: absolute;
-                z-index: 1;
-                top: 10px;
-                right: 10px;
-                border-radius: 3px;
-                width: 120px;
-                border: 1px solid rgba(0,0,0,0.4);
-                font-family: 'Open Sans', sans-serif;
-            }
-            
-            #menu a {
-                font-size: 13px;
-                color: #404040;
-                display: block;
-                margin: 0;
-                padding: 0;
-                padding: 10px;
-                text-decoration: none;
-                border-bottom: 1px solid rgba(0,0,0,0.25);
-                text-align: center;
-            }
-            
-            #menu a:last-child {
-                border: none;
-            }
-            
-            #menu a:hover {
-                background-color: #f8f8f8;
-                color: #404040;
-            }
-            
-            #menu a.active {
-                background-color: #3887be;
-                color: #ffffff;
-            }
-            
-            #menu a.active:hover {
-                background: #3074a4;
-            }
-
-            .map-overlay {
-                font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
-                position: absolute;
-                width: 25%;
-                top: 0;
-                left: 0;
-                padding: 10px;
-            }
-            
-            .map-overlay .map-overlay-inner {
-                background-color: #fff;
-                box-shadow:0 1px 2px rgba(0, 0, 0, 0.20);
-                border-radius: 3px;
-                padding: 10px;
-                margin-bottom: 10px;
-            }
-            
-            .map-overlay h2 {
-                line-height: 24px;
-                display: block;
-                margin: 0 0 10px;
-            }
-            
-            .map-overlay .legend .bar {
-                height: 10px;
-                width: 100%;
-                background: linear-gradient(to right, #FCA107, #7F3121);
-            }
-            
-            .map-overlay input {
-                background-color: transparent;
-                display: inline-block;
-                width: 100%;
-                position: relative;
-                margin: 0;
-                cursor: ew-resize;
-            }
-
-        </style>
+        <link rel="stylesheet" href="styles.css">
     </head>
     <body>
         <nav id="menu"></nav>
         <div id="map"></div>
-        <!--
-        <div class='map-overlay top'>
-            <div class='map-overlay-inner'>
-                <h2>Speed: </h2><h2 id='month'></h2>
-                <input id='slider' class="slider" type='range' min='0' max='1000' step='1' value='0' />
-            </div>
-        </div>
-
-        -->
         <script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>
 
         <script>
@@ -250,8 +65,6 @@
                     "features": []
                 };
 
-                var currentPath = null;
-
                 var geojsonNodes = {
                     "name": "NewFeatureType",
                     "type": "FeatureCollection",
@@ -291,6 +104,44 @@
                 // from GL JS's use in the added source. You can use any request method (library
                 // or otherwise) that you want.
                 
+                class Trace{
+                    constructor(traces){
+                        this.traces = traces;
+                        this.coordinates = traces.geometry.coordinates;                        
+                    }
+                }
+
+                class TraceRebalancing extends Trace{
+                    constructor(traces){
+                        super(traces);
+                        let o = traces.geometry.coordinates[0];
+                        let d = traces.geometry.coordinates[traces.geometry.coordinates.length - 1];
+                        this.od = {
+                            "geometry": {
+                                "type":"LineString",
+                                "coordinates": [o,d]
+                            },
+                            "type":"Feature",
+                            "properties": {
+                                "to": "target"
+                            }
+
+                        };
+                    }
+
+                    get o(){
+                        return this.od.geometry.coordinates[0];
+                    }
+
+                    get d(){
+                        return this.od.geometry.coordinates[1];
+                    }
+
+                    set o(newOrigin){
+                        this.od.geometry.coordinates[0] = newOrigin;
+                    }
+                }
+
                 class Vehicle{
                     constructor(id, geojson){
                         this.id = id,
@@ -301,132 +152,142 @@
                         this.current = this.previous;
                         this.next = this.current;
                         this.i = 0;
-                        this.relocating = false;
+                        this.isRebalancing = false;
                         this.relocatingIndex = 0;
                         this.rebOrigin = null;
                         this.targetNode = null;
                         this.nodes = [];
                         this.paths = [];
+                        this.currentTrace = null;
+                        this.curretPath = null;
                     }
 
-                    isFeaturePoint(f) {
-                        return this.route[f].geometry.type == "Point";
+                    isFeaturePoint() {
+                        return this.route[this.leg].geometry.type == "Point";
                     }
-                    isTarget(){
+                    getNextNode(){
+                        return (this.leg + 2 < this.route.length? this.route[this.leg + 2]:null);
+                    }
+                    nextNodeIsTarget(){
                         return this.leg + 2 < this.route.length && this.route[this.leg + 2].properties.type == "target";
+                    }
+                    getCurrentNode(){
+                        return this.route[this.leg];
+                    }
+                    processNode(){
+                        var node = this.getCurrentNode();
+                        var nextNode = this.getNextNode();
+
+                        // Add point if it is not a stop point
+                        if (node.properties.type != "stop") {
+                            this.nodes.push(node);
+                        }
+                        // Update target node
+                        if (this.nextNodeIsTarget()) {
+                            
+                            this.nodes.push(nextNode);
+
+                            var rebalancingLine = this.route[this.leg + 1];
+                            this.currentTrace = new TraceRebalancing(rebalancingLine);
+                            this.paths.push(this.currentTrace.od);
+
+                            this.isRebalancing = true;
+
+                            this.targetNode = this.nodes[this.nodes.length - 1];
+                            this.rebOrigin = this.paths[this.paths.length - 1];
+                            this.i = 0;
+                            // go to next feature (skip rebalancing path and target)
+                            this.leg += 3;
+
+                    
+                        } else {
+                            this.i = 0;
+                            // go to next feature (skip)
+                            this.leg++;
+                        }
+                    }
+
+                    processTrace(){
+                        var path = this.route[this.leg];
+                        
+                        if (this.i == 0) {
+                            this.currentPath = path.geometry.coordinates;
+                            path.geometry.coordinates = [];
+                            //console.log("path:" + path.geometry.coordinates.length + "current:" + this.currentPath.length);
+                            this.paths.push(path);
+                        }
+
+                        // Feature is a line. Show step by step.
+                        var coordinates = this.currentPath;
+                        var load = path.properties.load;
+                        var duration = path.properties.distance_s;
+                        var capacity = path.properties.capacity;
+                        duration = parseInt(duration, 10);
+
+                        if (this.i < coordinates.length) {
+                            //console.log("coord:" + coordinates.length + " - Coordinates:" + path.geometry.coordinates.length + " - i:" + this.i);
+
+                            this.next = this.i < coordinates.length - 1 ? coordinates[this.i + 1] : this.current;
+
+                            this.updateCurrentPosition();
+                            this.updateBearing();
+                            this.addCoordinatesToPath(coordinates[this.i]);
+                            this.previous = this.current;
+                            
+                            if (this.isRebalancing) {
+                                this.updateRelocationGuideLineOrigin(coordinates[this.i]);
+                            }
+                            
+                            //map.panTo(coordinates[i]);
+                            this.i++;
+                            this.current = this.i < coordinates.length ? coordinates[this.i] : this.current;
+
+                        } else {
+                            // End processing line, can go to next feature
+                            this.i = 0;
+                            this.leg++;
+
+                            if (this.isRebalancing) {
+                                this.stopRelocating();
+                            }
+                        }
+                    }
+
+                    updateCurrentPosition(){
+                        point.features[this.id].geometry.coordinates = this.current;
+                    }
+
+                    addCoordinatesToPath(coords){
+                        this.paths[this.paths.length - 1].geometry.coordinates.push(coords);
+                    }
+
+                    updateBearing(){
+                        point.features[this.id].properties.bearing = turf.bearing(
+                            turf.point(this.previous),
+                            turf.point(this.next)
+                        );
+                    }
+
+                    updateRelocationGuideLineOrigin(o){
+                        //Updating the line origin when rebalancing
+                        this.currentTrace.o = o;
+                    }
+                    
+                    stopRelocating(){
+                        // Remove relocation path and target
+                        this.paths.splice(this.paths.length - 2, 1);
+                        this.nodes.splice(this.nodes.length - 1, 1);
+                        this.isRebalancing = false;
                     }
 
                     update(timer){
 
                         if (this.leg < this.route.length) {
 
-                            // Is the feature a node?
-                            if (this.isFeaturePoint(this.leg)) {
-                                var node = this.route[this.leg];
-                                var target = null;
-                                var rebalancingLine = null;
-
-                                // Update target node
-                                if (this.isTarget()) {
-                                    target = this.route[this.leg + 2];
-                                    rebalancingLine = this.route[this.leg + 1];
-                                    
-                                }
-
-                                // Add point if it is not a stop point
-                                if (node.properties.type != "stop") {
-                                    this.nodes.push(node);
-                                } else {
-                                    //TODO increase point to represent idleness in stop point
-                                }
-
-                                // Checking if there is a target node ahead
-                                if (target != null) {
-
-                                    this.relocating = true;
-
-                                    var directLine = [];
-
-                                    //Connect with direct line
-                                    var o = rebalancingLine.geometry.coordinates[0];
-                                    var d = rebalancingLine.geometry.coordinates[rebalancingLine.geometry.coordinates.length - 1];
-                                    directLine.push(o);
-                                    directLine.push(d);
-                                    
-                                    rebalancingLine.geometry.coordinates = directLine;
-
-                                    this.nodes.push(target);
-
-                                    this.targetNode = this.nodes[this.nodes.length - 1];
-
-                                    this.paths.push(rebalancingLine);
-                                    
-                                    this.rebOrigin = this.paths[this.paths.length-1];
-                                    this.i = 0;
-                                    // go to next feature (skip rebalancing path and target)
-                                    this.leg += 3;
-
-                                } else {
-                                    this.i = 0;
-                                    // go to next feature (skip)
-                                    this.leg++;
-                                }
+                            if (this.isFeaturePoint()) {
+                                this.processNode();
                             } else {
-
-                                var path = this.route[this.leg];
-
-                                if (this.i == 0) {
-                                    currentPath = path.geometry.coordinates;
-                                    path.geometry.coordinates = [];
-                                    this.paths.push(path);
-                                }
-
-                                // Feature is a line. Show step by step.
-                                var coordinates = currentPath;
-                                var load = path.properties.load;
-                                var duration = path.properties.distance_s;
-                                var capacity = path.properties.capacity;
-                                duration = parseInt(duration, 10);
-
-                                var lastPathId = this.paths.length - 1;
-
-                                if (this.i < coordinates.length) {
-
-                                    this.next = this.i < coordinates.length - 1 ? coordinates[this.i + 1] : this.current;
-                                    
-
-                                    point.features[this.id].geometry.coordinates = this.current;
-
-                                    point.features[this.id].properties.bearing = turf.bearing(
-                                        turf.point(this.previous),
-                                        turf.point(this.next)
-                                    );
-
-                                    this.previous = this.current;
-                                    this.paths[lastPathId].geometry.coordinates.push(coordinates[this.i]);
-
-                                    if (this.relocating) {
-                                        //Updating the line origin when rebalancing
-                                        this.rebOrigin.geometry.coordinates[0] = coordinates[this.i];
-                                    }
-                                    //map.panTo(coordinates[i]);
-                                    this.i++;
-                                    this.current = this.i < coordinates.length ? coordinates[this.i] : this.current;
-
-
-                                } else {
-                                    // End processing line, can go to next feature
-                                    this.i = 0;
-                                    this.leg++;
-                                    if (this.relocating) {
-
-                                        // Remove relocation path and target
-                                        this.paths.splice(this.paths.length - 2, 1);
-                                        this.nodes.splice(this.nodes.length - 1, 1);
-                                        
-                                        this.relocating = false;
-                                    }
-                                }
+                                this.processTrace();
                             }
                         } else {
                             //Stop when all features are processed
