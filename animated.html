@@ -103,9 +103,9 @@
                 
                 class Trace{
                     constructor(traces){
-                        this.traces = traces;
+                        this.lineString = traces;
                         this.traveled = traces;
-                        
+
                         this.coordinates = traces.geometry.coordinates;    
                         this.indexCurrentCoord = 0;                    
                     }
@@ -208,7 +208,7 @@
                     }
 
                     incrementRebalancing(){
-                        this.leg += 3;
+                        this.leg += 2;
                     }
 
                     increment() {
@@ -300,27 +300,33 @@
 
                 class Journey {
                     constructor(){
-                        this.coordinates = [];
-                        this.completed = [];
+                        this.traveledLineString = [];
                         this.currentTrace = null;
+                        this.currentRebalancingTrace = null;
                     }
 
                     addLineString(lineString){
-                        this.completed.push(lineString);
+                        this.traveledLineString.push(lineString);
                     }
 
                     addCoords(coords){
-                        this.completed[this.completed.length - 1].geometry.coordinates.push(coords);
+                        this.traveledLineString[this.traveledLineString.length - 1].geometry.coordinates.push(coords);
                     }
 
                     removeRebalancingGuideLine(){
-                        this.completed.splice(this.completed.length - 2, 1);
+                        this.traveledLineString.splice(this.traveledLineString.length - 2, 1);
+                        this.currentRebalancingTrace = null;
                     }
 
                     addFeatureLineString(feature){
-                        this.currentTrace = new TraceFactory(feature);
-                        if (this.currentTrace instanceof TraceRebalancing){
-                            this.addLineString(this.currentTrace.od);
+                        let trace = new TraceFactory(feature);
+                        if (trace instanceof TraceRebalancing){
+                            console.log("Line rebalancing");
+                            this.currentRebalancingTrace = trace;
+                            this.addLineString(this.currentRebalancingTrace.od);
+                        }else{
+                            console.log("Line trip");
+                            this.currentTrace = trace;
                         }
                     }
                 }
@@ -342,7 +348,6 @@
                         // Incremental geojson features
                         this.nodes = [];
                         this.journey = new Journey();
-
                     }
             
                     
@@ -357,7 +362,8 @@
 
                         // Update target node
                         if (this.features.nextNodeIsTarget()) {
-                            this.nodes.push(nextNode);
+                            console.log("ADDING REBALANCING LINE");
+                            console.log(nextNode);
                             this.journey.addFeatureLineString(this.features.getLineString())
 
                             this.isRebalancing = true;
@@ -366,14 +372,20 @@
                             this.features.incrementRebalancing();
 
                         } else {
+                            console.log("ADDING REGULAR LINE");
                             this.journey.addFeatureLineString(this.features.getLineString());
                             this.features.increment();
                         }
                     }
 
                     startIncrementalRoute(){
+                        
                         if (this.journey.currentTrace.indexCurrentCoord == 0) {
+                            console.log("START INC");
                             var path = this.features.current;
+                            var pathTraces = this.journey.currentTrace.lineString;
+                            var pathTraveled = this.journey.currentTrace.traveled;
+                            console.log(path.geometry.coordinates.length + " - traveled:" + pathTraveled.geometry.coordinates.length + " - traces:" + pathTraces.geometry.coordinates.length);
                             this.currentPath = path.geometry.coordinates;
                             path.geometry.coordinates = [];
                             this.journey.addLineString(path);
@@ -430,12 +442,13 @@
 
                     updateRelocationGuideLineOrigin(o){
                         //Updating the line origin when rebalancing
-                        this.journey.currentTrace.o = o;
+                        this.journey.currentRebalancingTrace.o = o;
                     }
                     
                     stopRelocating(){
                         // Remove relocation path and target
                         this.journey.removeRebalancingGuideLine();
+                        console.log(this.nodes.slice(-2));
                         this.nodes.splice(this.nodes.length - 1, 1);
                         this.isRebalancing = false;
                     }
@@ -711,7 +724,7 @@
                         let nodes = [];
                         for (v of fleet){
                             v.update(timer);
-                            Array.prototype.push.apply(paths, v.journey.completed);
+                            Array.prototype.push.apply(paths, v.journey.traveledLineString);
                             Array.prototype.push.apply(nodes, v.nodes);
                         }
                         geojsonTraces.features = paths;
