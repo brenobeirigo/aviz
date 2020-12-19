@@ -10,9 +10,24 @@
         <link href='https://api.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
         <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
         <link rel="stylesheet" href="styles.css">
+        <!-- Font Awesome -->
+        <link href="https://use.fontawesome.com/releases/v5.8.2/css/all.css" rel="stylesheet" />
+        <!-- Google Fonts -->
+        <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+        <!-- MDB -->
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/2.2.1/mdb.min.css" rel="stylesheet" />
     </head>
     <body>
-        <nav id="menu"></nav>
+        <nav id="menu">
+
+
+        </nav>
+        <nav id="slider">
+            <label class="form-label" for="customRange1">Example range</label>
+            <div class="range">
+                <input type="range" class="form-range" id="customRange1"/>
+            </div>
+        </nav>
         <div id="map"></div>
         <script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>
 
@@ -22,7 +37,7 @@
             //output.innerHTML = slider.value; // Display the default slider value
 
             mapboxgl.accessToken = 'pk.eyJ1IjoiYnJlbm9iZWlyaWdvIiwiYSI6ImNpeHJiMDNidTAwMm0zNHFpcXVzd2UycHgifQ.tWIDAiRhjSzp1Bd40rxaHw';
-
+            var allCoords = [];
             var map = new mapboxgl.Map({
                 container: 'map',
                 style: 'mapbox://styles/brenobeirigo/cjrjc79t00a3s2so32n11zu6b',
@@ -89,6 +104,8 @@
                 class Trace{
                     constructor(traces){
                         this.traces = traces;
+                        this.traveled = traces;
+                        
                         this.coordinates = traces.geometry.coordinates;    
                         this.indexCurrentCoord = 0;                    
                     }
@@ -126,78 +143,212 @@
                 }
 
                 class FeatureList {
-                    constructor(features) {
+                    constructor(geojson) {
                         this.features = geojson.features;
                         this.leg = 0;
                     }
 
-                    get currentNode() {
+                    getAllCoordinates(){
+                        let coords = [];
+
+                        for(let f of this.features){
+                            
+                            if(f.geometry.type == "Point"){
+                                let node = new NodeFactory(f); 
+                                if (!(node instanceof NodeTarget)){
+                                    Array.prototype.push.apply(coords,[node.coordinates]);
+                                    
+                                }
+                                
+                            }else{
+                                let trace = new TraceFactory(f);
+                                Array.prototype.push.apply(coords, trace.coordinates);
+                            }
+
+                        }
+
+                        return coords;
+                    }
+
+
+                    isPoint() {
+                        return this.features[this.leg].geometry.type == "Point";
+                    }
+
+                    isLineString() {
+                        return this.features[this.leg].geometry.type == "LineString";
+                    }
+
+                    get current() {
                         return this.features[this.leg];
                     }
 
-                    get currentPath() {
+                    currentPath() {
                         return this.features[this.leg + 1];
                     }
 
-                    get nextNode() {
+                    nextNode() {
                         return (this.leg + 2 < this.features.length ? this.features[this.leg + 2] : null);
                     }
 
+                    getLineString(){
+                        return this.features[this.leg + 1];
+                    }
+
+                    isEmpty(){
+                        return this.leg >= this.features.length;
+                    }
+
                     nextNodeIsTarget() {
-                        return this.nextNode !== null && this.nextNode.properties.type == "target";
+                        return this.nextNode() !== null && this.nextNode().properties.type == "target";
                     }
 
                     isNode() {
                         return this.features[this.leg].geometry.type == "Point";
                     }
 
-                    increment() {
-
-                        this.leg++;
+                    incrementRebalancing(){
+                        this.leg += 3;
                     }
 
-                    ended() {
-                        return this.leg < this.features.length;
+                    increment() {
+                        this.leg++;
+                    }
+                }
+
+                class Node {
+                    constructor(node) {
+                        this.feature = node;
+                        this.type = node.properties.type;
+                        this.arrival = node.properties.arrival;
+                        this.departure = node.properties.departure;
+                        this.earliest = node.properties.earliest;
+                        this.latest = node.properties.latest;
+                        this.userId = node.properties.user_id;
+                        this.networkId = node.properties.network_id;
+                        this.nodeId = node.properties.id;
+                        this.load = node.properties.load;
+                        this.coordinates = node.geometry.coordinates;
+                    }
+
+                    get popup() {
+                        let str = "";
+                        str += "<h3>" + this.userId + "</h3>";
+                        str += "<h4><table><tr>";
+                        str += "<td align='right'><b>Placement:</b></td> <td>" + this.earliest + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Latest:</b></td> <td>" + this.latest + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
+                        str += "</tr></table></h4>";
+                        return str;
+                    }
+                }
+
+                class NodeOrigin extends Node {
+                    constructor(node) {
+                        super(node);
+                    }
+                }
+
+                class NodeTarget extends Node {
+                    constructor(node) {
+                        super(node);
+                    }
+                }
+
+                class NodeMiddle extends Node {
+                    constructor(node) {
+                        super(node);
+                    }
+                    get popup() {
+                        let str = "";
+                        str += "<h3>New assignment</h3>";
+                        str += "<h4><table><tr>";
+                        str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
+                        str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
+                        str += "</tr></table></h4>";
+                        return str;
+                    }
+                }
+
+
+                class NodeFactory {
+                    constructor(node) {
+                        if (node.properties.type === "middle") {
+                            return new NodeMiddle(node);
+                        } else if (node.properties.type === "origin") {
+                            return new NodeOrigin(node);
+                        } else if (node.properties.type === "target") {
+                            return new NodeTarget(node);
+                        } else {
+                            return new Node(node);
+                        }
+                    }
+                }
+
+                class TraceFactory {
+                    constructor(trace) {
+                        if (trace.properties.to === "target") {
+                            return new TraceRebalancing(trace);
+                        } else {
+                            return new Trace(trace);
+                        }
+                    }
+                }
+
+                class Journey {
+                    constructor(){
+                        this.coordinates = [];
+                        this.completed = [];
+                        this.currentTrace = null;
+                    }
+
+                    addLineString(lineString){
+                        this.completed.push(lineString);
+                    }
+
+                    addCoords(coords){
+                        this.completed[this.completed.length - 1].geometry.coordinates.push(coords);
+                    }
+
+                    removeRebalancingGuideLine(){
+                        this.completed.splice(this.completed.length - 2, 1);
+                    }
+
+                    addFeatureLineString(feature){
+                        this.currentTrace = new TraceFactory(feature);
+                        if (this.currentTrace instanceof TraceRebalancing){
+                            this.addLineString(this.currentTrace.od);
+                        }
                     }
                 }
 
                 class Vehicle{
                     constructor(id, geojson){
                         this.id = id,
-                        this.features = geojson.features;
-                        this.leg = 0;
+                        this.features = new FeatureList(geojson);
+                        this.origin = new NodeFactory(this.features.current);
 
                         // Location - previous, current, next used to calculate bearing
-                        this.firstLocation = this.getCoordinate(this.leg, 0);
-                        this.previousLocation = this.firstLocation;
-                        this.currentLocation = this.firstLocation;
-                        this.nextLocation = this.firstLocation;
+                        this.previousLocation = this.origin.coordinates;
+                        this.currentLocation = this.origin.coordinates;
+                        this.nextLocation = this.origin.coordinates;
                         
                         this.isRebalancing = false;
-                        this.route = null;
-                        this.curretPath = null;
+                        this.currentPath = null;
 
                         // Incremental geojson features
                         this.nodes = [];
-                        this.incrementalRoute = [];
-                    }
+                        this.journey = new Journey();
 
-                    isFeaturePoint() {
-                        return this.features[this.leg].geometry.type == "Point";
                     }
-                    getNextNode(){
-                        return (this.leg + 2 < this.features.length? this.features[this.leg + 2]:null);
-                    }
-
-                    nextNodeIsTarget(){
-                        return this.leg + 2 < this.features.length && this.features[this.leg + 2].properties.type == "target";
-                    }
-                    getCurrentNode(){
-                        return this.features[this.leg];
-                    }
+            
+                    
                     processNode(){
-                        var node = this.getCurrentNode();
-                        var nextNode = this.getNextNode();
+                        var node = this.features.current;
+                        var nextNode = this.features.nextNode();
 
                         // Add point if it is not a stop point
                         if (node.properties.type != "stop") {
@@ -205,27 +356,27 @@
                         }
 
                         // Update target node
-                        if (this.nextNodeIsTarget()) {
+                        if (this.features.nextNodeIsTarget()) {
                             this.nodes.push(nextNode);
-                            this.route = new TraceRebalancing(this.features[this.leg + 1]);
-                            this.incrementalRoute.push(this.route.od);
+                            this.journey.addFeatureLineString(this.features.getLineString())
 
                             this.isRebalancing = true;
 
                             // go to next feature (skip rebalancing path and target)
-                            this.leg += 3;
+                            this.features.incrementRebalancing();
+
                         } else {
-                            this.route = new Trace(this.features[this.leg + 1]);
-                            this.leg++;
+                            this.journey.addFeatureLineString(this.features.getLineString());
+                            this.features.increment();
                         }
                     }
 
                     startIncrementalRoute(){
-                        if (this.route.indexCurrentCoord == 0) {
-                            var path = this.features[this.leg];
+                        if (this.journey.currentTrace.indexCurrentCoord == 0) {
+                            var path = this.features.current;
                             this.currentPath = path.geometry.coordinates;
                             path.geometry.coordinates = [];
-                            this.incrementalRoute.push(path);
+                            this.journey.addLineString(path);
                         }
                     }
 
@@ -238,27 +389,27 @@
                         //var capacity = path.properties.capacity;
                         //duration = parseInt(duration, 10);
 
-                        if (this.route.indexCurrentCoord < this.currentPath.length) {
+                        if (this.journey.currentTrace.indexCurrentCoord < this.currentPath.length) {
                             
                             this.updateCurrentPosition();
                             this.updateBearing();
-                            this.addCoordinatesToPath(this.currentPath[this.route.indexCurrentCoord]);
+                            this.journey.addCoords(this.currentPath[this.journey.currentTrace.indexCurrentCoord]);
                             
                             if (this.isRebalancing) {
-                                this.updateRelocationGuideLineOrigin(this.currentPath[this.route.indexCurrentCoord]);
+                                this.updateRelocationGuideLineOrigin(this.currentPath[this.journey.currentTrace.indexCurrentCoord]);
                             }
                             
                             //map.panTo(coordinates[i]);
                             
                             this.previousLocation = this.currentLocation;
-                            this.nextLocation = this.route.indexCurrentCoord < this.currentPath.length - 1 ? this.currentPath[this.route.indexCurrentCoord + 1] : this.currentLocation;
-                            this.route.indexCurrentCoord++;
-                            this.currentLocation = this.route.indexCurrentCoord < this.currentPath.length ? this.currentPath[this.route.indexCurrentCoord] : this.currentLocation;
+                            this.nextLocation = this.journey.currentTrace.indexCurrentCoord < this.currentPath.length - 1 ? this.currentPath[this.journey.currentTrace.indexCurrentCoord + 1] : this.currentLocation;
+                            this.journey.currentTrace.indexCurrentCoord++;
+                            this.currentLocation = this.journey.currentTrace.indexCurrentCoord < this.currentPath.length ? this.currentPath[this.journey.currentTrace.indexCurrentCoord] : this.currentLocation;
 
                         } else {
                             // End processing line, can go to next feature
-                            this.route.indexCurrentCoord = 0;
-                            this.leg++;
+                            this.journey.currentTrace.indexCurrentCoord = 0;
+                            this.features.increment();
 
                             if (this.isRebalancing) {
                                 this.stopRelocating();
@@ -270,10 +421,6 @@
                         geojsonVehicles.features[this.id].geometry.coordinates = this.currentLocation;
                     }
 
-                    addCoordinatesToPath(coords){
-                        this.incrementalRoute[this.incrementalRoute.length - 1].geometry.coordinates.push(coords);
-                    }
-
                     updateBearing(){
                         geojsonVehicles.features[this.id].properties.bearing = turf.bearing(
                             turf.point(this.previousLocation),
@@ -283,21 +430,21 @@
 
                     updateRelocationGuideLineOrigin(o){
                         //Updating the line origin when rebalancing
-                        this.route.o = o;
+                        this.journey.currentTrace.o = o;
                     }
                     
                     stopRelocating(){
                         // Remove relocation path and target
-                        this.incrementalRoute.splice(this.incrementalRoute.length - 2, 1);
+                        this.journey.removeRebalancingGuideLine();
                         this.nodes.splice(this.nodes.length - 1, 1);
                         this.isRebalancing = false;
                     }
 
                     update(timer){
 
-                        if (this.leg < this.features.length) {
+                        if (!this.features.isEmpty()) {
 
-                            if (this.isFeaturePoint()) {
+                            if (this.features.isPoint()) {
                                 this.processNode();
                             } else {
                                 this.processTrace();
@@ -307,22 +454,16 @@
                             window.clearInterval(timer);
                         }
                     }
-
-                    getCoordinate(f, i) {
-                        if (this.isFeaturePoint(f)) {
-                            return this.features[f].geometry.coordinates;
-                        } else {
-                            return this.features[f].geometry.coordinates[i];
-                        }
-                    }
                 }
 
                 function getVehicleListFromData(data){
                     
                     fleet = [];
 
-                    for (vehicle of data["routes"]) {
-                        fleet.push(new Vehicle(vehicle["id"], vehicle["path"]));
+                    for (let vehicle of data["routes"]) {
+                        let v = new Vehicle(vehicle["id"], vehicle["path"]);
+                        allCoords = v.features.getAllCoordinates()
+                        fleet.push(v);
                     }
 
                     fleet.pop();
@@ -493,7 +634,7 @@
                             "properties": { "id": v.id, "status": "rebalancing" },
                             "geometry": {
                                 "type": "Point",
-                                "coordinates": v.firstLocation
+                                "coordinates": v.origin.coordinates
                             }
                         };
                         geojsonVehicles.features.push(f);
@@ -531,60 +672,6 @@
                         });
                     });
 
-                    class Node{
-                        constructor(node){
-                            this.type = node.properties.type;    
-                            this.arrival = node.properties.arrival;
-                            this.departure = node.properties.departure;
-                            this.earliest = node.properties.earliest;
-                            this.latest = node.properties.latest;
-                            this.userId = node.properties.user_id;
-                            this.networkId = node.properties.network_id;
-                            this.nodeId = node.properties.id;
-                            this.load = node.properties.load;
-                        }
-
-                        get popup(){
-                            let str = "";
-                            str += "<h3>" + this.userId + "</h3>";
-                            str += "<h4><table><tr>";
-                            str += "<td align='right'><b>Placement:</b></td> <td>" + this.earliest + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Latest:</b></td> <td>" + this.latest + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
-                            str += "</tr></table></h4>";
-                            return str;
-                        }
-                    }
-
-                    class NodeMiddle extends Node{
-                        constructor(node){
-                            super(node);
-                        }
-                        get popup() {
-                            let str = "";
-                            str += "<h3>New assignment</h3>";
-                            str += "<h4><table><tr>";
-                            str += "<td align='right'><b>Arrival:</b></td> <td>" + this.arrival + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Type:</b></td> <td>" + this.type + "</br></td></tr><tr>";
-                            str += "<td align='right'><b>Node id:</b></td> <td>" + this.nodeId + "</td>";
-                            str += "</tr></table></h4>";
-                            return str;
-                        }
-                    }
-
-
-                    class NodeFactory {
-                        constructor(node) {
-                            if (node.properties.type === "middle") {
-                                return new NodeMiddle(node);
-                            } else {
-                                return new Node(node);
-                            }
-                        }
-                    }
-
                     // Change the cursor to a pointer when the mouse is over the nodes layer
                     map.on('mouseenter', 'nodes', function () {
                         map.getCanvas().style.cursor = 'pointer';
@@ -616,7 +703,7 @@
                     });
 
                     // setup the viewport
-                    map.jumpTo({ 'center': fleet[0].firstLocation, 'zoom': 13 });
+                    map.jumpTo({ 'center': fleet[0].origin.coordinates, 'zoom': 13 });
                     map.setPitch(30);
                     
                     var timer = window.setInterval(function() {
@@ -624,7 +711,7 @@
                         let nodes = [];
                         for (v of fleet){
                             v.update(timer);
-                            Array.prototype.push.apply(paths, v.incrementalRoute);
+                            Array.prototype.push.apply(paths, v.journey.completed);
                             Array.prototype.push.apply(nodes, v.nodes);
                         }
                         geojsonTraces.features = paths;
@@ -635,6 +722,12 @@
                         map.getSource('point').setData(geojsonVehicles);
 
                     }, speed/acceleration);
+
+                    d3.select("#customRange1").on("click", function () {
+                        let value = document.getElementById("customRange1").value;
+                        console.log("SLIDER", value);
+                    });
+                    
                 });
 
             var toggleableLayerIds = [ 'trace', 'nodes' ];
