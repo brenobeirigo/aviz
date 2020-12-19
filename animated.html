@@ -106,8 +106,26 @@
                         this.lineString = traces;
                         this.traveled = traces;
 
-                        this.coordinates = traces.geometry.coordinates;    
+                        this.coordinates = this.lineString.geometry.coordinates;
+                        
+                        
+                        //console.log("A)" + this.str + ":" + this.coordinates.length + " - " +
+                        //    this.traveled.geometry.coordinates.length + " - " +
+                        //    this.lineString.geometry.coordinates.length
+                        //)
+
+                        //this.traveled.geometry.coordinates = [];
+
+                        //console.log("B)" + this.str + ":" + this.coordinates.length + " - " +
+                        //  this.traveled.geometry.coordinates.length + " - " +
+                        //    this.lineString.geometry.coordinates.length
+                        //)
+
                         this.indexCurrentCoord = 0;                    
+                    }
+
+                    get str(){
+                        return "Trace("+this.coordinates.length+")";
                     }
 
                     isActive(){
@@ -141,6 +159,11 @@
                             }
 
                         };
+                    }
+
+                    
+                    get str() {
+                        return "TraceRebalancing(" + this.coordinates.length + ")";
                     }
 
                     get o(){
@@ -313,10 +336,24 @@
                 }
 
                 class Journey {
-                    constructor(){
+                    constructor(firstFeature){
+                        this.origin = new NodeFactory(firstFeature);
+
+                        // Coordinate - previous, current, next used to calculate bearing
+                        this.previousCoordinate = this.origin.coordinates;
+                        this.currentCoordinate = this.origin.coordinates;
+
+                        this.nodes = [];
                         this.traveledLineString = [];
                         this.currentTrace = null;
                         this.currentRebalancingTrace = null;
+                    }
+
+                    updateCurrentCoordinate(){
+                        this.previousCoordinate = this.currentCoordinate;
+                        this.currentTrace.indexCurrentCoord++;
+                        this.currentCoordinate = this.currentTrace.isActive() ? this.getCurrentCoordinate() : this.currentCoordinate;
+
                     }
 
                     getNextCoordinate(){
@@ -327,8 +364,15 @@
                         return this.currentTrace.getCurrentCoordinate();
                     }
 
-                    addLineString(lineString){
+                    addLineString(lineString) {
                         this.traveledLineString.push(lineString);
+                    }
+                    
+                    addFeaturePoint(point) {
+                        // Add point if it is not a stop point
+                        if (point.properties.type != "stop") {
+                            this.nodes.push(point);
+                        }
                     }
 
                     addCoords(coords){
@@ -337,6 +381,7 @@
 
                     removeRebalancingGuideLine(){
                         this.traveledLineString.splice(this.traveledLineString.length - 2, 1);
+                        this.nodes.splice(this.nodes.length - 1, 1);
                         this.currentRebalancingTrace = null;
                     }
 
@@ -347,6 +392,14 @@
                             this.addLineString(this.currentRebalancingTrace.od);
                         }else{
                             this.currentTrace = trace;
+                            this.currentTrace.traveled.geometry.coordinates = [];
+                            this.addLineString(this.currentTrace.traveled);
+
+                            //console.log("Add feature - " + this.currentTrace.coordinates.length + " - " + 
+                            //    this.currentTrace.traveled.geometry.coordinates.length + " - " + 
+                            //    this.currentTrace.lineString.geometry.coordinates.length
+                            //)
+
                         }
                     }
                 }
@@ -355,33 +408,36 @@
                     constructor(id, geojson){
                         this.id = id,
                         this.features = new FeatureList(geojson);
-                        this.origin = new NodeFactory(this.features.current);
-
-                        // Location - previous, current, next used to calculate bearing
-                        this.previousLocation = this.origin.coordinates;
-                        this.currentLocation = this.origin.coordinates;
-                        
                         this.isRebalancing = false;
-
-                        // Incremental geojson features
-                        this.nodes = [];
-                        this.journey = new Journey();
+                        this.journey = new Journey(this.features.current);
                     }
-            
-                    
-                    processNode(){
-                        var node = this.features.current;
-                        var lineString = this.features.getLineString();
-                        this.journey.addFeatureLineString(lineString);
 
-                        // Add point if it is not a stop point
-                        if (node.properties.type != "stop") {
-                            this.nodes.push(node);
-                        }
+                    get origin(){
+                        return this.journey.origin;
+                    }
+
+                    get bearing(){
+                        return turf.bearing(
+                            turf.point(v.journey.previousCoordinate),
+                            turf.point(v.journey.currentCoordinate)
+                        );
+                    }
+
+                    get currentPoint(){
+                        return this.features.current;
+                    }
+
+                    get currentLineString(){
+                        return this.features.getLineString();
+                    }
+
+                    processNode(){
+                        this.journey.addFeaturePoint(this.currentPoint);
+                        this.journey.addFeatureLineString(this.currentLineString);
 
                         // Update target node
                         if (this.features.nextNodeIsTarget()) {
-                            
+
                             this.isRebalancing = true;
 
                             // go to next feature (skip rebalancing path and target)
@@ -392,18 +448,7 @@
                         }
                     }
 
-                    startIncrementalRoute(){
-                        
-                        if (this.journey.currentTrace.indexCurrentCoord == 0) {
-                            var path = this.journey.currentTrace.traveled;
-                            path.geometry.coordinates = [];
-                            this.journey.addLineString(path);
-                        }
-                    }
-
                     processTrace(){
-
-                        this.startIncrementalRoute();
 
                         if (this.journey.currentTrace.isActive()) {
                             
@@ -411,49 +456,32 @@
                             this.journey.addCoords(currentCoord);
                             
                             if (this.isRebalancing) {
-                                this.updateRelocationGuideLineOrigin(currentCoord);
+                                //Updating the line origin when rebalancing
+                                this.journey.currentRebalancingTrace.o = currentCoord;
                             }
-                            
-                            geojsonVehicles.features[this.id].geometry.coordinates = this.currentLocation;
-
+                        
                             //map.panTo(coordinates[i]);
                             
-                            this.previousLocation = this.currentLocation;
-                            this.journey.currentTrace.indexCurrentCoord++;
-                            this.currentLocation = this.journey.currentTrace.isActive() ? this.journey.getCurrentCoordinate() : this.currentLocation;
-
-                            geojsonVehicles.features[this.id].properties.bearing = turf.bearing(
-                                turf.point(this.previousLocation),
-                                turf.point(this.currentLocation)
-                            );
-
+                            this.journey.updateCurrentCoordinate();
+                            
                         } else {
                             // End processing line, can go to next feature
-                            this.journey.currentTrace.indexCurrentCoord = 0;
                             this.features.increment();
-
                             if (this.isRebalancing) {
                                 this.stopRelocating();
                             }
                         }
                     }
 
-                    updateRelocationGuideLineOrigin(o){
-                        //Updating the line origin when rebalancing
-                        this.journey.currentRebalancingTrace.o = o;
-                    }
-                    
                     stopRelocating(){
                         // Remove relocation path and target
                         this.journey.removeRebalancingGuideLine();
-                        this.nodes.splice(this.nodes.length - 1, 1);
                         this.isRebalancing = false;
                     }
 
                     update(timer){
 
                         if (!this.features.isEmpty()) {
-
                             if (this.features.isPoint()) {
                                 this.processNode();
                             } else {
@@ -722,8 +750,11 @@
                         for (v of fleet){
                             v.update(timer);
                             Array.prototype.push.apply(paths, v.journey.traveledLineString);
-                            Array.prototype.push.apply(nodes, v.nodes);
+                            Array.prototype.push.apply(nodes, v.journey.nodes);
+                            geojsonVehicles.features[v.id].properties.bearing = v.bearing;
+                            geojsonVehicles.features[v.id].geometry.coordinates = v.journey.currentCoordinate;
                         }
+
                         geojsonTraces.features = paths;
                         geojsonNodes.features = nodes;
                         map.getSource('trace').setData(geojsonTraces);
