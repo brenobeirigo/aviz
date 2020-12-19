@@ -125,23 +125,61 @@
                     }
                 }
 
+                class FeatureList {
+                    constructor(features) {
+                        this.features = geojson.features;
+                        this.leg = 0;
+                    }
+
+                    get currentNode() {
+                        return this.features[this.leg];
+                    }
+
+                    get currentPath() {
+                        return this.features[this.leg + 1];
+                    }
+
+                    get nextNode() {
+                        return (this.leg + 2 < this.features.length ? this.features[this.leg + 2] : null);
+                    }
+
+                    nextNodeIsTarget() {
+                        return this.nextNode !== null && this.nextNode.properties.type == "target";
+                    }
+
+                    isNode() {
+                        return this.features[this.leg].geometry.type == "Point";
+                    }
+
+                    increment() {
+
+                        this.leg++;
+                    }
+
+                    ended() {
+                        return this.leg < this.features.length;
+                    }
+                }
+
                 class Vehicle{
                     constructor(id, geojson){
                         this.id = id,
                         this.features = geojson.features;
                         this.leg = 0;
+
+                        // Location - previous, current, next used to calculate bearing
                         this.firstLocation = this.getCoordinate(this.leg, 0);
-                        this.previous = this.firstLocation;
-                        this.current = this.previous;
-                        this.next = this.current;
+                        this.previousLocation = this.firstLocation;
+                        this.currentLocation = this.firstLocation;
+                        this.nextLocation = this.firstLocation;
+                        
                         this.isRebalancing = false;
-                        this.relocatingIndex = 0;
-                        this.rebOrigin = null;
-                        this.targetNode = null;
-                        this.nodes = [];
-                        this.incrementalRoute = [];
                         this.route = null;
                         this.curretPath = null;
+
+                        // Incremental geojson features
+                        this.nodes = [];
+                        this.incrementalRoute = [];
                     }
 
                     isFeaturePoint() {
@@ -150,6 +188,7 @@
                     getNextNode(){
                         return (this.leg + 2 < this.features.length? this.features[this.leg + 2]:null);
                     }
+
                     nextNodeIsTarget(){
                         return this.leg + 2 < this.features.length && this.features[this.leg + 2].properties.type == "target";
                     }
@@ -164,26 +203,19 @@
                         if (node.properties.type != "stop") {
                             this.nodes.push(node);
                         }
+
                         // Update target node
                         if (this.nextNodeIsTarget()) {
-                            
                             this.nodes.push(nextNode);
-
-                            var rebalancingLine = this.features[this.leg + 1];
-                            this.route = new TraceRebalancing(rebalancingLine);
+                            this.route = new TraceRebalancing(this.features[this.leg + 1]);
                             this.incrementalRoute.push(this.route.od);
 
                             this.isRebalancing = true;
 
-                            this.targetNode = this.nodes[this.nodes.length - 1];
-                            this.rebOrigin = this.incrementalRoute[this.incrementalRoute.length - 1];
                             // go to next feature (skip rebalancing path and target)
                             this.leg += 3;
-
-                    
                         } else {
                             this.route = new Trace(this.features[this.leg + 1]);
-                            // go to next feature (skip)
                             this.leg++;
                         }
                     }
@@ -218,10 +250,10 @@
                             
                             //map.panTo(coordinates[i]);
                             
-                            this.previous = this.current;
-                            this.next = this.route.indexCurrentCoord < this.currentPath.length - 1 ? this.currentPath[this.route.indexCurrentCoord + 1] : this.current;
+                            this.previousLocation = this.currentLocation;
+                            this.nextLocation = this.route.indexCurrentCoord < this.currentPath.length - 1 ? this.currentPath[this.route.indexCurrentCoord + 1] : this.currentLocation;
                             this.route.indexCurrentCoord++;
-                            this.current = this.route.indexCurrentCoord < this.currentPath.length ? this.currentPath[this.route.indexCurrentCoord] : this.current;
+                            this.currentLocation = this.route.indexCurrentCoord < this.currentPath.length ? this.currentPath[this.route.indexCurrentCoord] : this.currentLocation;
 
                         } else {
                             // End processing line, can go to next feature
@@ -235,7 +267,7 @@
                     }
 
                     updateCurrentPosition(){
-                        geojsonVehicles.features[this.id].geometry.coordinates = this.current;
+                        geojsonVehicles.features[this.id].geometry.coordinates = this.currentLocation;
                     }
 
                     addCoordinatesToPath(coords){
@@ -244,8 +276,8 @@
 
                     updateBearing(){
                         geojsonVehicles.features[this.id].properties.bearing = turf.bearing(
-                            turf.point(this.previous),
-                            turf.point(this.next)
+                            turf.point(this.previousLocation),
+                            turf.point(this.nextLocation)
                         );
                     }
 
