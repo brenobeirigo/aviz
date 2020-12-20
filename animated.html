@@ -69,12 +69,12 @@
             //var source_gson2 = 'all2.geojson';
             var source_gson = '2v.json';
 
-            //var source_gson = 'http://localhost:2999/traces/V1.geojson';
-            //var source_gson = 'http://localhost:3000/traces/week_capacity10.geojson';
+            //var source_gson = 'http://localhost:2999/route/V1.geojson';
+            //var source_gson = 'http://localhost:3000/route/week_capacity10.geojson';
             
             map.on('load', function () {
 
-                var geojsonTraces = {
+                var geojsonRoutes = {
                     "name": "NewFeatureType",
                     "type": "FeatureCollection",
                     "features": []
@@ -101,10 +101,10 @@
                 // from GL JS's use in the added source. You can use any request method (library
                 // or otherwise) that you want.
                 
-                class Trace{
-                    constructor(traces){
-                        this.lineString = traces;
-                        this.traveled = traces;
+                class Route{
+                    constructor(lineString){
+                        this.lineString = lineString;
+                        this.traveled = lineString;
 
                         this.coordinates = this.lineString.geometry.coordinates;
                         
@@ -125,15 +125,14 @@
                     }
 
                     get str(){
-                        return "Trace("+this.coordinates.length+")";
+                        let cur = this.indexCurrentCoord + 1;
+                        let total = this.coordinates.length;
+                        let progress = parseFloat(cur / total).toFixed(2) + "%";
+                        return "Route["+ cur + "/" + total + "]" + "("+progress+")";
                     }
 
                     isActive(){
                         return this.indexCurrentCoord < this.coordinates.length;
-                    }
-
-                    getNextCoordinate() {
-                        return this.indexCurrentCoord < this.coordinates.length - 1 ? this.coordinates[this.indexCurrentCoord + 1] : this.coordinates[this.indexCurrentCoord];
                     }
 
                     getCurrentCoordinate(){
@@ -143,11 +142,11 @@
 
                 
 
-                class TraceRebalancing extends Trace{
-                    constructor(traces){
-                        super(traces);
-                        let o = traces.geometry.coordinates[0];
-                        let d = traces.geometry.coordinates[traces.geometry.coordinates.length - 1];
+                class RouteRebalancing extends Route{
+                    constructor(route){
+                        super(route);
+                        let o = route.geometry.coordinates[0];
+                        let d = route.geometry.coordinates[route.geometry.coordinates.length - 1];
                         this.od = {
                             "geometry": {
                                 "type":"LineString",
@@ -163,7 +162,7 @@
 
                     
                     get str() {
-                        return "TraceRebalancing(" + this.coordinates.length + ")";
+                        return "RouteRebalancing(" + this.coordinates.length + ")";
                     }
 
                     get o(){
@@ -198,8 +197,8 @@
                                 }
                                 
                             }else{
-                                let trace = new TraceFactory(f);
-                                Array.prototype.push.apply(coords, trace.coordinates);
+                                let route = new RouteFactory(f);
+                                Array.prototype.push.apply(coords, route.coordinates);
                             }
 
                         }
@@ -209,11 +208,11 @@
 
 
                     isPoint() {
-                        return this.features[this.leg].geometry.type == "Point";
+                        return this.current.geometry.type == "Point";
                     }
 
                     isLineString() {
-                        return this.features[this.leg].geometry.type == "LineString";
+                        return this.current.geometry.type == "LineString";
                     }
 
                     get current() {
@@ -224,28 +223,9 @@
                         return this.features[this.leg + 1];
                     }
 
-                    nextNode() {
-                        return (this.leg + 2 < this.features.length ? this.features[this.leg + 2] : null);
-                    }
-
-                    getLineString(){
-                        return this.features[this.leg + 1];
-                    }
 
                     isEmpty(){
                         return this.leg >= this.features.length;
-                    }
-
-                    nextNodeIsTarget() {
-                        return this.nextNode() !== null && this.nextNode().properties.type == "target";
-                    }
-
-                    isNode() {
-                        return this.features[this.leg].geometry.type == "Point";
-                    }
-
-                    incrementRebalancing(){
-                        this.leg += 2;
                     }
 
                     increment() {
@@ -325,12 +305,12 @@
                     }
                 }
 
-                class TraceFactory {
-                    constructor(trace) {
-                        if (trace.properties.to === "target") {
-                            return new TraceRebalancing(trace);
+                class RouteFactory {
+                    constructor(route) {
+                        if (route.properties.to === "target") {
+                            return new RouteRebalancing(route);
                         } else {
-                            return new Trace(trace);
+                            return new Route(route);
                         }
                     }
                 }
@@ -343,35 +323,51 @@
                         this.previousCoordinate = this.origin.coordinates;
                         this.currentCoordinate = this.origin.coordinates;
 
-                        this.nodes = [];
+                        this.plannedPoints = [];
+                        this.plannedLineString = [];
+
+                        this.visitedPoints = [];
                         this.traveledLineString = [];
-                        this.currentTrace = null;
-                        this.currentRebalancingTrace = null;
+                        this.currentRoute = null;
+
+                        // Plannned route refers to the route vehicle was following
+                        // before waypoint was found
+                        this.plannedRoute = null;
+                    }
+
+                    endCurrentRoute(){
+                        this.currentRoute = null;
+                        this.plannedRoute = null;
                     }
 
                     updateCurrentCoordinate(){
                         this.previousCoordinate = this.currentCoordinate;
-                        this.currentTrace.indexCurrentCoord++;
-                        this.currentCoordinate = this.currentTrace.isActive() ? this.getCurrentCoordinate() : this.currentCoordinate;
+                        this.currentRoute.indexCurrentCoord++;
+                        this.currentCoordinate = this.currentRoute.isActive() ? this.getCurrentCoordinate() : this.currentCoordinate;
 
-                    }
-
-                    getNextCoordinate(){
-                        return this.currentTrace.getNextCoordinate();
                     }
 
                     getCurrentCoordinate(){
-                        return this.currentTrace.getCurrentCoordinate();
+                        return this.currentRoute.getCurrentCoordinate();
                     }
 
                     addLineString(lineString) {
                         this.traveledLineString.push(lineString);
                     }
                     
+                    addPlannedLineString(lineString) {
+                        this.plannedLineString.push(lineString);
+                    }
+
                     addFeaturePoint(point) {
                         // Add point if it is not a stop point
-                        if (point.properties.type != "stop") {
-                            this.nodes.push(point);
+                        if (point.properties.type !== "stop") {
+
+                            if (point.properties.type === "target"){
+                                this.plannedPoints.push(point);
+                            }else {
+                                this.visitedPoints.push(point);
+                            }
                         }
                     }
 
@@ -380,26 +376,19 @@
                     }
 
                     removeRebalancingGuideLine(){
-                        this.traveledLineString.splice(this.traveledLineString.length - 2, 1);
-                        this.nodes.splice(this.nodes.length - 1, 1);
-                        this.currentRebalancingTrace = null;
+                        this.plannedLineString = [];
+                        this.plannedPoints = [];
                     }
 
-                    addFeatureLineString(feature){
-                        let trace = new TraceFactory(feature);
-                        if (trace instanceof TraceRebalancing){
-                            this.currentRebalancingTrace = trace;
-                            this.addLineString(this.currentRebalancingTrace.od);
+                    addRouteFromLineString(feature){
+                        let route = new RouteFactory(feature);
+                        if (route instanceof RouteRebalancing){
+                            this.plannedRoute = route;
+                            this.addPlannedLineString(this.plannedRoute.od);
                         }else{
-                            this.currentTrace = trace;
-                            this.currentTrace.traveled.geometry.coordinates = [];
-                            this.addLineString(this.currentTrace.traveled);
-
-                            //console.log("Add feature - " + this.currentTrace.coordinates.length + " - " + 
-                            //    this.currentTrace.traveled.geometry.coordinates.length + " - " + 
-                            //    this.currentTrace.lineString.geometry.coordinates.length
-                            //)
-
+                            this.currentRoute = route;
+                            this.currentRoute.traveled.geometry.coordinates = [];
+                            this.addLineString(this.currentRoute.traveled);
                         }
                     }
                 }
@@ -432,45 +421,49 @@
                     }
 
                     processNode(){
-                        this.journey.addFeaturePoint(this.currentPoint);
-                        this.journey.addFeatureLineString(this.currentLineString);
-
-                        // Update target node
-                        if (this.features.nextNodeIsTarget()) {
-
-                            this.isRebalancing = true;
-
-                            // go to next feature (skip rebalancing path and target)
-                            this.features.incrementRebalancing();
-
-                        } else {
-                            this.features.increment();
-                        }
+                        this.journey.addFeaturePoint(this.features.current);
+                        this.features.increment();
                     }
 
-                    processTrace(){
+                    processRoute(){
 
-                        if (this.journey.currentTrace.isActive()) {
+                        // console.log("----------------")
+                        
+                        if(this.journey.currentRoute === null){
+                            //console.log("ADDING");
+                            this.journey.addRouteFromLineString(this.features.current);
+                        
+                            if (this.journey.plannedRoute instanceof RouteRebalancing) {
+                                //console.log("REBALANCING");
+                                this.isRebalancing = true;
+                                this.features.increment();
+                            }
+                        } else if (this.journey.currentRoute.isActive()) {
                             
+                            // console.log(this.journey.currentRoute.str);
+
                             let currentCoord = this.journey.getCurrentCoordinate();
                             this.journey.addCoords(currentCoord);
-                            
+
                             if (this.isRebalancing) {
                                 //Updating the line origin when rebalancing
-                                this.journey.currentRebalancingTrace.o = currentCoord;
+                                this.journey.plannedRoute.o = currentCoord;
                             }
-                        
+
                             //map.panTo(coordinates[i]);
-                            
+
                             this.journey.updateCurrentCoordinate();
-                            
+
                         } else {
+                            //console.log("RESETING");
                             // End processing line, can go to next feature
                             this.features.increment();
+                            this.journey.endCurrentRoute();
                             if (this.isRebalancing) {
                                 this.stopRelocating();
                             }
                         }
+                        
                     }
 
                     stopRelocating(){
@@ -485,7 +478,7 @@
                             if (this.features.isPoint()) {
                                 this.processNode();
                             } else {
-                                this.processTrace();
+                                this.processRoute();
                             }
                         } else {
                             //Stop when all features are processed
@@ -518,7 +511,7 @@
                     if (err) throw err;
                     
                     // add it to the map
-                    map.addSource('trace', { type: 'geojson', data: geojsonTraces });
+                    map.addSource('routes', { type: 'geojson', data: geojsonRoutes });
                     map.addSource('nodes', { type: 'geojson', data: geojsonNodes });
                     
                     var minLineWidth = 2;
@@ -531,9 +524,9 @@
 
                     // Vehicle route
                     map.addLayer({
-                        "id": "trace",
+                        "id": "routes",
                         "type": "line",
-                        "source": "trace",
+                        "source": "routes",
                         "layout": {
                             "line-join": "round",
                             "line-cap": "round"
@@ -745,19 +738,24 @@
                     map.setPitch(30);
                     
                     var timer = window.setInterval(function() {
-                        let paths = [];
-                        let nodes = [];
+                        let traveledLineString = [];
+                        let visitedPoints = [];
                         for (v of fleet){
                             v.update(timer);
-                            Array.prototype.push.apply(paths, v.journey.traveledLineString);
-                            Array.prototype.push.apply(nodes, v.journey.nodes);
+                            Array.prototype.push.apply(traveledLineString, v.journey.traveledLineString);
+                            Array.prototype.push.apply(visitedPoints, v.journey.visitedPoints);
+                            
+                            // Add planned routes (e.g., rebalancing guideline and target)
+                            Array.prototype.push.apply(traveledLineString, v.journey.plannedLineString);
+                            Array.prototype.push.apply(visitedPoints, v.journey.plannedPoints);
+                            
                             geojsonVehicles.features[v.id].properties.bearing = v.bearing;
                             geojsonVehicles.features[v.id].geometry.coordinates = v.journey.currentCoordinate;
                         }
 
-                        geojsonTraces.features = paths;
-                        geojsonNodes.features = nodes;
-                        map.getSource('trace').setData(geojsonTraces);
+                        geojsonRoutes.features = traveledLineString;
+                        geojsonNodes.features = visitedPoints;
+                        map.getSource('routes').setData(geojsonRoutes);
                         map.getSource('nodes').setData(geojsonNodes);
                         // Update the source with this new data.
                         map.getSource('point').setData(geojsonVehicles);
@@ -771,7 +769,7 @@
                     
                 });
 
-            var toggleableLayerIds = [ 'trace', 'nodes' ];
+            var toggleableLayerIds = [ 'routes', 'nodes' ];
             
             for (var i = 0; i < toggleableLayerIds.length; i++) {
                 var id = toggleableLayerIds[i];
