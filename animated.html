@@ -109,14 +109,14 @@
                         this.coordinates = this.lineString.geometry.coordinates;
                         
                         
-                        //console.log("A)" + this.str + ":" + this.coordinates.length + " - " +
+                        //console.log("A)" + this.toString() + ":" + this.coordinates.length + " - " +
                         //    this.traveled.geometry.coordinates.length + " - " +
                         //    this.lineString.geometry.coordinates.length
                         //)
 
                         //this.traveled.geometry.coordinates = [];
 
-                        //console.log("B)" + this.str + ":" + this.coordinates.length + " - " +
+                        //console.log("B)" + this.toString() + ":" + this.coordinates.length + " - " +
                         //  this.traveled.geometry.coordinates.length + " - " +
                         //    this.lineString.geometry.coordinates.length
                         //)
@@ -124,7 +124,7 @@
                         this.indexCurrentCoord = 0;                    
                     }
 
-                    get str(){
+                    toString(){
                         let cur = this.indexCurrentCoord + 1;
                         let total = this.coordinates.length;
                         let progress = parseFloat(cur / total).toFixed(2) + "%";
@@ -161,7 +161,7 @@
                     }
 
                     
-                    get str() {
+                    toString() {
                         return "RouteRebalancing(" + this.coordinates.length + ")";
                     }
 
@@ -182,6 +182,21 @@
                     constructor(geojson) {
                         this.features = geojson.features;
                         this.leg = 0;
+                    }
+
+                    toString() {
+                        let total = this.features.length;
+
+                        if (this.isEmpty()){
+                            return "Finished processing" + total + " features"
+                        }
+                        let cur = this.leg + 1;
+                        let progress = parseFloat(cur / total).toFixed(2) + "%";
+                        return this.type +  "[" + cur + "/" + total + "]" + "(" + progress + ")";
+                    }
+
+                    get type(){
+                        return this.current.geometry.type;
                     }
 
                     getAllCoordinates(){
@@ -208,6 +223,8 @@
 
 
                     isPoint() {
+                        console.log(this.leg);
+                        console.log(this.current);
                         return this.current.geometry.type == "Point";
                     }
 
@@ -230,6 +247,7 @@
 
                     increment() {
                         this.leg++;
+                        // this.leg = Math.min(++this.leg, this.features.length-1);
                     }
                 }
 
@@ -401,6 +419,14 @@
                         this.journey = new Journey(this.features.current);
                     }
 
+                    hasFinishedJourney(){
+                        return this.features.isEmpty();
+                    }
+
+                    toString(){
+                        return "Vehicle " + this.id;
+                    }
+
                     get origin(){
                         return this.journey.origin;
                     }
@@ -440,7 +466,7 @@
                             }
                         } else if (this.journey.currentRoute.isActive()) {
                             
-                            // console.log(this.journey.currentRoute.str);
+                            // console.log(this.journey.currentRoute.toString());
 
                             let currentCoord = this.journey.getCurrentCoordinate();
                             this.journey.addCoords(currentCoord);
@@ -465,7 +491,9 @@
                         }
                         
                     }
-
+                    finishedJourney(){
+                        return this.features.isEmpty();
+                    }
                     stopRelocating(){
                         // Remove relocation path and target
                         this.journey.removeRebalancingGuideLine();
@@ -474,15 +502,10 @@
 
                     update(timer){
 
-                        if (!this.features.isEmpty()) {
-                            if (this.features.isPoint()) {
-                                this.processNode();
-                            } else {
-                                this.processRoute();
-                            }
+                        if (this.features.isPoint()) {
+                            this.processNode();
                         } else {
-                            //Stop when all features are processed
-                            window.clearInterval(timer);
+                            this.processRoute();
                         }
                     }
                 }
@@ -497,7 +520,7 @@
                         fleet.push(v);
                     }
 
-                    fleet.pop();
+                    // fleet.pop();
 
                     return fleet;
 
@@ -737,30 +760,48 @@
                     map.jumpTo({ 'center': fleet[0].origin.coordinates, 'zoom': 13 });
                     map.setPitch(30);
                     
+                    let allVehiclesProcessed = true;
+                    var msInterval = 10; // speed / acceleration;
                     var timer = window.setInterval(function() {
+                        console.log("#Fleet status");
+                        
                         let traveledLineString = [];
                         let visitedPoints = [];
+                        
+
                         for (v of fleet){
-                            v.update(timer);
-                            Array.prototype.push.apply(traveledLineString, v.journey.traveledLineString);
-                            Array.prototype.push.apply(visitedPoints, v.journey.visitedPoints);
+
+                            if (!v.finishedJourney()){
+
+                                allVehiclesProcessed = false;
+
+                                console.log(v.toString() + "==" + v.features.toString())
+                                
+                                v.update(timer);
+
+                                Array.prototype.push.apply(traveledLineString, v.journey.traveledLineString);
+                                Array.prototype.push.apply(visitedPoints, v.journey.visitedPoints);
+                                
+                                // Add planned routes (e.g., rebalancing guideline and target)
+                                Array.prototype.push.apply(traveledLineString, v.journey.plannedLineString);
+                                Array.prototype.push.apply(visitedPoints, v.journey.plannedPoints);
+                                
+                                geojsonVehicles.features[v.id].properties.bearing = v.bearing;
+                                geojsonVehicles.features[v.id].geometry.coordinates = v.journey.currentCoordinate;
                             
-                            // Add planned routes (e.g., rebalancing guideline and target)
-                            Array.prototype.push.apply(traveledLineString, v.journey.plannedLineString);
-                            Array.prototype.push.apply(visitedPoints, v.journey.plannedPoints);
-                            
-                            geojsonVehicles.features[v.id].properties.bearing = v.bearing;
-                            geojsonVehicles.features[v.id].geometry.coordinates = v.journey.currentCoordinate;
+                            }
+                         }
+
+                         if (allVehiclesProcessed) {
+                            window.clearInterval(timer);
+                        } else {
+                            geojsonRoutes.features = traveledLineString;
+                            geojsonNodes.features = visitedPoints;
+                            map.getSource('routes').setData(geojsonRoutes);
+                            map.getSource('nodes').setData(geojsonNodes);
+                            map.getSource('point').setData(geojsonVehicles);
                         }
-
-                        geojsonRoutes.features = traveledLineString;
-                        geojsonNodes.features = visitedPoints;
-                        map.getSource('routes').setData(geojsonRoutes);
-                        map.getSource('nodes').setData(geojsonNodes);
-                        // Update the source with this new data.
-                        map.getSource('point').setData(geojsonVehicles);
-
-                    }, speed/acceleration);
+                    }, msInterval);
 
                     d3.select("#customRange1").on("click", function () {
                         let value = document.getElementById("customRange1").value;
