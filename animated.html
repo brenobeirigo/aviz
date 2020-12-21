@@ -123,11 +123,15 @@
 
                         this.indexCurrentCoord = 0;                    
                     }
-
+                    get progress(){
+                        let cur = this.indexCurrentCoord + 1;
+                        let total = this.coordinates.length;
+                        return  parseFloat(cur / total);
+                    }
                     toString(){
                         let cur = this.indexCurrentCoord + 1;
                         let total = this.coordinates.length;
-                        let progress = parseFloat(cur / total).toFixed(2) + "%";
+                        let progress = this.progress.toFixed(2) + "%";
                         return "Route["+ cur + "/" + total + "]" + "("+progress+")";
                     }
 
@@ -139,8 +143,6 @@
                         return this.coordinates[this.indexCurrentCoord];
                     }
                 }
-
-                
 
                 class RouteRebalancing extends Route{
                     constructor(route){
@@ -184,6 +186,17 @@
                         this.leg = 0;
                     }
 
+                    get progress(){
+
+                        if (this.isEmpty()) {
+                            return 1;
+                        }
+                        
+                        let total = this.features.length;
+                        let cur = this.leg + 1;
+                        return parseFloat(cur / total)
+                    }
+
                     toString() {
                         let total = this.features.length;
 
@@ -191,7 +204,7 @@
                             return "Finished processing" + total + " features"
                         }
                         let cur = this.leg + 1;
-                        let progress = parseFloat(cur / total).toFixed(2) + "%";
+                        let progress = this.progress.toFixed(2) + "%";
                         return this.type +  "[" + cur + "/" + total + "]" + "(" + progress + ")";
                     }
 
@@ -307,7 +320,6 @@
                         return str;
                     }
                 }
-
 
                 class NodeFactory {
                     constructor(node) {
@@ -433,8 +445,8 @@
 
                     get bearing(){
                         return turf.bearing(
-                            turf.point(v.journey.previousCoordinate),
-                            turf.point(v.journey.currentCoordinate)
+                            turf.point(this.journey.previousCoordinate),
+                            turf.point(this.journey.currentCoordinate)
                         );
                     }
 
@@ -521,6 +533,7 @@
                     }
 
                     // fleet.pop();
+                    fleet.shift();
 
                     return fleet;
 
@@ -682,10 +695,11 @@
                         }
                     });
 
-                    for(v of fleet){
+                    for(i=0;i<fleet.length;i++){
+                        let v = fleet[i];
                         let f = {
                             "type": "Feature",
-                            "properties": { "id": v.id, "status": "rebalancing" },
+                            "properties": { "id": i, "status": "rebalancing" },
                             "geometry": {
                                 "type": "Point",
                                 "coordinates": v.origin.coordinates
@@ -700,6 +714,7 @@
                     // Adding red arrow representing vehicle
                     map.loadImage('img/red_arrow_up.png', function(error, image) {
                         if (error) throw error;
+                        // sdf allows icon colorization
                         map.addImage('vehicle', image,  { 'sdf': true });
                         map.addLayer({
                             "id": "point",
@@ -736,8 +751,8 @@
                         map.getCanvas().style.cursor = '';
                     });
 
-                    map.on('click', function(e) {
 
+                    function addNodePopToMap(e){
                         var features = map.queryRenderedFeatures(e.point, {
                             layers: ['nodes'] // replace this with the name of the layer
                         });
@@ -754,7 +769,9 @@
                             .setLngLat(feature.geometry.coordinates)
                             .setHTML(node.popup)
                             .addTo(map);
-                    });
+                    }
+
+                    map.on('click', addNodePopToMap);
 
                     // setup the viewport
                     map.jumpTo({ 'center': fleet[0].origin.coordinates, 'zoom': 13 });
@@ -762,37 +779,40 @@
                     
                     let allVehiclesProcessed = true;
                     var msInterval = 10; // speed / acceleration;
-                    var timer = window.setInterval(function() {
+                    var timer = window.setInterval(updateFleetProgress, msInterval);
+
+                    function updateFleetProgress() {
                         console.log("#Fleet status");
-                        
+
                         let traveledLineString = [];
                         let visitedPoints = [];
+
                         
+                        for (i=0; i < fleet.length;i++) {
+                            let v = fleet[i];
 
-                        for (v of fleet){
-
-                            if (!v.finishedJourney()){
+                            if (!v.finishedJourney()) {
 
                                 allVehiclesProcessed = false;
 
                                 console.log(v.toString() + "==" + v.features.toString())
-                                
+
                                 v.update(timer);
 
                                 Array.prototype.push.apply(traveledLineString, v.journey.traveledLineString);
                                 Array.prototype.push.apply(visitedPoints, v.journey.visitedPoints);
-                                
+
                                 // Add planned routes (e.g., rebalancing guideline and target)
                                 Array.prototype.push.apply(traveledLineString, v.journey.plannedLineString);
                                 Array.prototype.push.apply(visitedPoints, v.journey.plannedPoints);
-                                
-                                geojsonVehicles.features[v.id].properties.bearing = v.bearing;
-                                geojsonVehicles.features[v.id].geometry.coordinates = v.journey.currentCoordinate;
-                            
-                            }
-                         }
 
-                         if (allVehiclesProcessed) {
+                                geojsonVehicles.features[i].properties.bearing = v.bearing;
+                                geojsonVehicles.features[i].geometry.coordinates = v.journey.currentCoordinate;
+
+                            }
+                        }
+
+                        if (allVehiclesProcessed) {
                             window.clearInterval(timer);
                         } else {
                             geojsonRoutes.features = traveledLineString;
@@ -801,14 +821,15 @@
                             map.getSource('nodes').setData(geojsonNodes);
                             map.getSource('point').setData(geojsonVehicles);
                         }
-                    }, msInterval);
+                    }
+                
+                
 
                     d3.select("#customRange1").on("click", function () {
                         let value = document.getElementById("customRange1").value;
                         console.log("SLIDER", value);
                     });
-                    
-                });
+                
 
             var toggleableLayerIds = [ 'routes', 'nodes' ];
             
@@ -840,6 +861,7 @@
                 layers.appendChild(link);
             }
             });
+        });
 
         </script>
     
