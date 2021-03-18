@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>title</title>
+    HTML JSResult Skip Results Iframe
+    EDIT ON
+
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        const STATUS_CARRYING = "carrying"
+        const STATUS_IDLE = "idle"
+        const STATUS_REBALANCING = "rebalancing"
+        const LINESTRING_TYPE = "linestring_type"
+        const LINESTRING_TYPE_REBALANCING = "type_rebalancing"
+        const STATUS_CRUISING = "cruising"
+    </script>
+    <script src="fleetStatusPlot.js"></script>
+
+</head>
+
+
+<script>
+
+
+    var startTime = new Date();
+    fleetSize = 40;
+
+    var fleetStatusMapObj = new FleetStatusMap(40, "Fleet", "myDiv");
+    fleetStatusMapObj.createFleetStatusPlot(startTime);
+
+
+    function rand() {
+        return Math.random();
+    }
+
+
+
+
+
+    var cnt = 0;
+
+
+
+    var interval = setInterval(function () {
+        //extendPlotWithFleetStatusFromDateTime(date, statusMap.values());
+
+
+        fleetStatusMapObj.updateStatusToCount(STATUS_REBALANCING, rand() * 40);
+        fleetStatusMapObj.updateStatusToCount(STATUS_IDLE, rand() * 40);
+
+        var date = new Date();
+
+        fleetStatusMapObj.plotFleetStatusAt(date);
+
+        if (++cnt === 100) clearInterval(interval);
+    }, 300);
+</script>
+
+<body>
+    <div id="myDiv" style="width: 500px; height:300px"></div>
+</body>
+
+
+</html>

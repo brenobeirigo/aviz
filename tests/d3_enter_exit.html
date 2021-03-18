@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]>      <html class="no-js"> <!--<![endif]-->
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="">
+    </head>
+    <body>
+        <script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>
+
+        <button onclick="add()">Add</button>
+        <button onclick="remove()">Remove</button>
+        <input id="filt" type="text" onkeyup="filter()">
+        <div id="panel"></div>
+        <script>
+            var count = 0;
+
+            let container = d3.select("#panel");
+            function showData(vehicles){
+                // Select all divs (does not matter if there are any)
+                let join = container
+                    .selectAll("div")
+                    .data(vehicles);
+                
+                // Enter a new div for elements that do not have a corresponding div in html
+                join.text(d => d.id + "Update")
+
+                join.enter()
+                    .append("div")
+                    .text(d=>d.id + "- new")
+
+                join.exit().remove();
+                
+            }
+            vehicles = [
+            {"id":0}
+            ];
+            function remove(){
+                
+                vehicles = vehicles.slice(0,-1);
+                count--;
+                showData(vehicles);
+            }
+
+            function add(){
+                console.log("adding...")
+                vehicles.push({"id":++count})
+                showData(vehicles);
+            }
+
+            function filter(){
+                let filt = document.getElementById("filt").value;
+                vehicles = vehicles.filter(d=>d.id<filt);
+                showData(vehicles);
+
+
+                console.log(filt)
+            }
+
+            showData(vehicles);
+
+            
+
+        </script>
+    </body>
+</html>

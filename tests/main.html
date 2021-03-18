@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>title</title>
+    <script src="util/dateUtil.js"></script>
+    <script src="location.js"></script>
+    <!-- <script src="path_to/file2.js"></script> -->
+    <script>
+
+const wp = {
+    "type": "Feature",
+    "properties": {
+        "type": "WAYPOINT",
+        "arrival": "2019-02-20 05:27:00",
+        "departure": "2019-02-20 05:27:00",
+        "duration": 0,
+        "earliest": "2019-02-20 05:27:00",
+        "latest": null,
+        "user_id": "-",
+        "user_class": "-",
+        "vehicle_load": 0,
+        "network_id": 2727,
+        "id": "WP-(2727)-05:27:00",
+        "pair": {
+            "type": "Feature",
+            "properties": {
+                "type": "PICKUP",
+                "arrival": "2019-02-20 05:30:12",
+                "departure": "2019-02-20 05:30:12",
+                "duration": 294,
+                "earliest": "2019-02-20 05:25:18",
+                "latest": "2019-02-20 05:30:17",
+                "user_id": "PU3734305-1(1005)-05:25:18",
+                "user_class": "network.node.NodeSource",
+                "vehicle_load": 0,
+                "network_id": 1005,
+                "id": "PU3734305-1(1005)-05:30:12",
+                "pair": null
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [-74.0115966, 40.7035182]
+            }
+        }
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [-73.9829135, 40.7420239]
+    }
+}
+
+
+        
+    console.log(new NodeFactory(wp));
+    </script>
+</head>
+<body>
+    
+</body>
+</html>

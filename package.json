@@ -1,0 +1,22 @@
+{
+
+  "name": "aviz",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "![Example of visualization - 1000 vehicles](assets/images/viz.gif) \r ## Installation",
+  "main": "ex.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brenobeirigo/aviz.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/brenobeirigo/aviz/issues"
+  },
+  "homepage": "https://github.com/brenobeirigo/aviz#readme"
+}

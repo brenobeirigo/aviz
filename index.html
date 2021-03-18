@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8' />
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+    <title>Draw GeoJSON points</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.0.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/@turf/turf/turf.min.js' charset='utf-8'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" href="styles.css">
+    <!-- Font Awesome -->
+    <link href="https://use.fontawesome.com/releases/v5.8.2/css/all.css" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <!-- MDB -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/2.2.1/mdb.min.css" rel="stylesheet" />
+
+</head>
+
+<body>
+    <nav id="main">
+        <nav id="menuPoints">
+            <div style="font-weight: bold; padding-bottom: 5px;">Visible nodes</div>
+        </nav>
+        <nav id="menu">
+        </nav>
+
+        <nav id="slider">
+            <!-- <div>Simulation speed</div> -->
+            <div class="range">
+                <label  style="font-weight: bold; padding-bottom: 5px;" class="form-label"  for="rangeTimer">Simulation speed</label>
+                <input type="range" min="1" max="1000" class="form-range" id="rangeTimer" /> <output hidden id="rangeTarget">1</output>
+            </div>
+        </nav>
+
+        <nav id="panel">
+            <span id="currentTime">"YYYY-MM-DD HH:MM:ss"</span>
+        </nav>
+        <div id="map"></div>
+    </nav>
+
+
+    <script src='http://d3js.org/d3.v3.min.js' charset='utf-8'></script>
+    <!-- Option 1: Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+        crossorigin="anonymous"></script>
+    <script src="util/dateUtil.js"></script>
+    <script src="util/geoJsonUtil.js"></script>
+    <script src="location.js"></script>
+    <script src="journey.js"></script>
+    <script src="route.js"></script>
+    <script src="vehicle.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="fleetStatusPlot.js"></script>
+
+    <script>
+        const queryString = window.location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const startTime = urlParams.get("start_time");
+        var currentDateTimeMs = Date.parse(startTime || "2019-02-20 9:30:00");
+
+        var checkedPoints = new Map();
+        checkedPoints.set(POINT_ORIGIN, {checked:true, label:"Origins"});
+        checkedPoints.set(POINT_PICKUP, {checked:false, label:"Pick-ups"});
+        checkedPoints.set(POINT_DROPOFF, {checked:true, label:"Drop-offs"});
+        checkedPoints.set(POINT_WAYPOINT, {checked:true, label:"Waypoints"});
+        checkedPoints.set(POINT_REB_SOURCE, {checked:false, label:"Rebalancing sources"});
+        checkedPoints.set(POINT_REB_TARGET, {checked:true, label:"Rebalancing targets"});
+        
+        var SelectedNodeTypeSet = new Set();
+        Array.from(checkedPoints).filter(([k,v])=> v.checked===true).map(v=>SelectedNodeTypeSet.add(v[0]));
+
+
+        //var output = document.getElementById("demo");
+        //output.innerHTML = slider.value; // Display the default slider value
+        //12.55 / 40.79605 / -73.95842 / -60.8 / 1
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYnJlbm9iZWlyaWdvIiwiYSI6ImNpeHJiMDNidTAwMm0zNHFpcXVzd2UycHgifQ.tWIDAiRhjSzp1Bd40rxaHw';
+        var allCoords = [];
+        var map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/brenobeirigo/ckkbavtgn17tm17p8y4aad2wy',
+            center: [-73.95842, 40.79605],
+            pitch: 0, // pitch in degrees
+            bearing: -90, // bearing in degrees
+            zoom: 12
+        });
+
+        var acceleration = 50;
+
+        var maxVehicleCapacity = 4;
+
+        const STATUS_CARRYING = "carrying"
+        const STATUS_IDLE = "idle"
+        const STATUS_REBALANCING = "rebalancing"
+        const LINESTRING_TYPE = "linestring_type"
+        const LINESTRING_TYPE_REBALANCING = "type_rebalancing"
+        const STATUS_CRUISING = "cruising"
+
+        const LAYER_ROUTES = "Routes";
+        const LAYER_NODES = "Nodes";
+        const LAYER_FLEET = "Fleet";
+        const LAYERS = [LAYER_ROUTES, LAYER_NODES, LAYER_FLEET];
+
+
+
+        const slider = document.getElementById("rangeTimer");
+        const output = document.getElementById("rangeTarget");
+
+        const InputCurrentTime = document.getElementById("currentTime");
+        InputCurrentTime.innerText = getCurrentDateTime();
+
+        function getCurrentDateTime() {
+            return getDateTimeStringFromMillis(currentDateTimeMs);
+        }
+
+        //var source_gson = 'all.geojson';
+        //var source_gson2 = 'all2.geojson';
+        //var source_gson = '2v.json';
+        // var source_gson = './data/fleetJourney.json';
+        var source_gson = './data/journeyWithCutoff.json';
+        // var source_gson = './data/singleVehicleWithCutoff.json';
+        // var source_gson = './data/rebTargetError.json';
+
+        //var source_gson = 'http://localhost:2999/route/V1.geojson';
+        //var source_gson = 'http://localhost:3000/route/week_capacity10.geojson';
+
+        class MapLayers {
+            constructor() {
+                this.geojsonRoutes = {
+                    "name": LAYER_ROUTES,
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+
+                this.geojsonNodes = {
+                    "name": LAYER_NODES,
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+
+                this.geojsonVehicles = {
+                    "name": LAYER_FLEET,
+                    "type": "FeatureCollection",
+                    "features": []
+                };
+            }
+        }
+        map.on('load', function () {
+
+
+            var geojsonRoutes = {
+                "name": LAYER_ROUTES,
+                "type": "FeatureCollection",
+                "features": []
+            };
+
+            var geojsonNodes = {
+                "name": LAYER_NODES,
+                "type": "FeatureCollection",
+                "features": []
+            };
+
+            var geojsonVehicles = {
+                "name": LAYER_FLEET,
+                "type": "FeatureCollection",
+                "features": []
+            };
+
+
+            function createLayerFilters() {
+                for (let [id, showPointCheckObj] of checkedPoints) {
+            
+                    let divCheck = document.createElement("div");
+                    divCheck.className = "form-check form-switch";
+                    divCheck.setAttribute("id", "filterNode" + id);
+
+                    let inputCheck = document.createElement("input");
+                    inputCheck.className = "form-check-input";
+                    inputCheck.type = "checkbox";
+                    inputCheck.setAttribute("id", "inlineCheckbox" + id);
+                    inputCheck.setAttribute("value", id);
+                    inputCheck.checked = showPointCheckObj.checked;
+                    divCheck.appendChild(inputCheck);
+
+                    inputCheck.onchange = function (e) {
+                        var clickedLayer = this.value;
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        // var visibility = map.getLayoutProperty(clickedLayer, 'visibility');
+
+                        if (this.checked == false) {
+                            // map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+                            SelectedNodeTypeSet.delete(id);
+                        }
+                        else {
+                            // map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+                            SelectedNodeTypeSet.add(id);
+                        }
+
+                        console.log(SelectedNodeTypeSet);
+                        // if (visibility === 'visible') {
+                        //     map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+                        //     // this.className = '';
+                        // } else {
+                        //     // this.className = 'active';
+                        //     map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+                        // }
+                    };
+
+                    let inputLabel = document.createElement("label");
+                    inputLabel.className = "form-check-label";
+                    inputLabel.for = "inlineCheckbox" + id;
+                    inputLabel.textContent =  showPointCheckObj.label;
+                    divCheck.appendChild(inputLabel);
+
+
+                    let layers = document.getElementById('menuPoints');
+                    layers.appendChild(divCheck);
+                }
+            };
+
+            function createLayerToggles() {
+                for (var i = 0; i < LAYERS.length; i++) {
+                    var id = LAYERS[i];
+
+                    var link = document.createElement('a');
+                    link.href = '#';
+                    link.className = 'active';
+                    link.textContent = id;
+
+                    link.onclick = function (e) {
+                        var clickedLayer = this.textContent;
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        var visibility = map.getLayoutProperty(clickedLayer, 'visibility');
+
+                        if (visibility === 'visible') {
+                            map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+                            this.className = '';
+                        } else {
+                            this.className = 'active';
+                            map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+                        }
+                    };
+
+                    var layers = document.getElementById('menu');
+                    layers.appendChild(link);
+                }
+            }
+
+            createLayerToggles();
+            createLayerFilters();
+            // We use D3 to fetch the JSON here so that we can parse and use it separately
+            // from GL JS's use in the added source. You can use any request method (library
+            // or otherwise) that you want.
+
+
+            function getVehicleListFromData({ routes }) {
+
+                fleet = [];
+
+                for (let vehicle of routes) {
+                    console.log(vehicle.id);
+                    console.log(vehicle.path);
+                    let v = new Vehicle(vehicle);
+                    //allCoords = v.journey.features.getAllCoordinates()
+                    fleet.push(v);
+                }
+
+                // fleet.pop();
+                //fleet.shift();
+
+                return fleet;
+
+            }
+            d3.json(source_gson, function (err, data) {
+
+                fleet = getVehicleListFromData(data);
+
+                console.log(fleet);
+
+                if (err) throw err;
+
+                // add it to the map
+                map.addSource(LAYER_ROUTES, { type: 'geojson', data: geojsonRoutes });
+                map.addSource(LAYER_NODES, { type: 'geojson', data: geojsonNodes });
+
+                var minLineWidth = 1;
+                var maxLineWidth = 1;
+
+                var minLineOpacity = 0.1;
+                var maxLineOpacity = 0.5;
+                var LineOpacityRebalancigGuide = 1
+
+                //TODO what happens when we have target -> target?
+
+                // Vehicle route
+                map.addLayer({
+                    "id": LAYER_ROUTES,
+                    "type": "line",
+                    "source": LAYER_ROUTES,
+                    "layout": {
+                        "line-join": "round",
+                        "line-cap": "round"
+                    },
+                    "paint": {
+                        "line-color":
+                            ['case',
+                                ["==", ['get', "linestring_type"], LINESTRING_TYPE_REBALANCING], "#FF0000",
+                                "#FF0000"
+                            ],
+                        "line-opacity": [
+                            'case',
+                            ["==", ['get', "linestring_type"], LINESTRING_TYPE_REBALANCING], LineOpacityRebalancigGuide,
+                            [
+                                '+',
+                                ['*',
+                                    ['/',
+                                        ['get', 'load'],
+                                        ['get', 'capacity']
+                                    ],
+                                    maxLineOpacity - minLineOpacity
+                                ],
+                                minLineOpacity
+                            ]
+                        ],
+                        "line-width":
+                            ['case',
+                                ["==", ['get', "linestring_type"], LINESTRING_TYPE_REBALANCING], maxLineWidth,
+                                ['case',
+                                    ["==", ['get', 'load'], 0], 0,
+                                    ['+', ['*',
+                                        ['/', ['get', 'number_of_requests'], ['get', 'capacity']],
+                                        maxLineWidth - minLineWidth
+                                    ],
+                                        minLineWidth
+                                    ]
+                                ]
+                            ]
+                    }
+                }
+                );
+
+                var minPointSize = 4;
+                var maxPointSize = 8;
+                var targetCircleRadius = 40;
+                var targetCircleOpacity = 0.3;
+                var targetCircleColor = '#FF0000';
+
+                var rangePointSize = maxPointSize - minPointSize;
+                var pointStyle = {
+                    radius: {
+                        origin: 10,
+                        pickup: minPointSize,
+                        destination: maxPointSize,
+                        target: targetCircleRadius,
+                        stop: 10,
+                        middle: maxPointSize
+                    },
+                    color: {
+                        business: { light: "#fcc777", dark: "#f8a51b" },
+                        standard: { light: "#bd7cb4", dark: "#a3218e" },
+                        lowcost: { light: "#56c4c5", dark: "#00acac" }
+                    }
+                };
+
+                // Layer containing the customer ODs
+                map.addLayer({
+                    "id": LAYER_NODES,
+                    "type": "circle",
+                    "source": LAYER_NODES,
+                    "paint": {
+                        "circle-radius": [
+                            'match',
+                            ['get', 'type'],
+                            POINT_ORIGIN, pointStyle.radius.origin,
+                            POINT_PICKUP, pointStyle.radius.pickup,
+                            POINT_DROPOFF, pointStyle.radius.destination,
+                            POINT_REB_TARGET, pointStyle.radius.target,
+                            POINT_STOP, pointStyle.radius.stop,
+                            POINT_REB_SOURCE, pointStyle.radius.stop,
+                            POINT_WAYPOINT, pointStyle.radius.middle,
+                            /* other */ 6
+                        ],
+                        'circle-opacity': [
+                            'match',
+                            ['get', 'type'],
+                            POINT_REB_TARGET, targetCircleOpacity,
+                            POINT_PICKUP, 1,
+                            POINT_DROPOFF, 0.5,
+                            /* other */ 0.5],
+                        'circle-color': [
+                            'match',
+                            ['get', 'type'],
+                            POINT_ORIGIN, '#FFFFFF',
+                            POINT_PICKUP, [
+                                'match',
+                                ['get', 'user_class'],
+                                'A', pointStyle.color.business.dark,
+                                'B', pointStyle.color.standard.dark,
+                                'C', pointStyle.color.lowcost.dark,
+                                /* other */ '#00ff00'],
+                            POINT_DROPOFF, [
+                                'match',
+                                ['get', 'user_class'],
+                                'A', pointStyle.color.business.dark,
+                                'B', pointStyle.color.standard.dark,
+                                'C', pointStyle.color.lowcost.dark,
+                                /* other */ '#00ff00'],
+                            POINT_REB_TARGET, targetCircleColor,
+                            POINT_STOP, '#FF0000',
+                            POINT_WAYPOINT, '#FF0000',
+                            /* other */ '#ccc'
+                        ]
+                    }
+                });
+
+                for (i = 0; i < fleet.length; i++) {
+                    let v = fleet[i];
+                    let f = {
+                        "type": "Feature",
+                        "properties": { "id": i, "status": "rebalancing" },
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": v.origin.coordinates
+                        }
+                    };
+                    geojsonVehicles.features.push(f);
+                }
+
+                // add it to the map
+                map.addSource(LAYER_FLEET, { type: 'geojson', data: geojsonVehicles });
+
+                // Adding red arrow representing vehicle
+                map.loadImage('img/red_arrow_up_small.png', function (error, image) {
+                    if (error) throw error;
+                    // sdf allows icon colorization
+                    map.addImage('vehicle', image, { 'sdf': true });
+                    map.addLayer({
+                        "id": LAYER_FLEET,
+                        "type": "symbol",
+                        "source": LAYER_FLEET,
+                        "layout": {
+                            "icon-image": "vehicle",
+                            "icon-size": 1,
+                            "icon-rotate": ["get", "bearing"],
+                            "icon-rotation-alignment": "map",
+                            "icon-allow-overlap": true,
+                            "icon-ignore-placement": true
+                        },
+                        'paint': {
+                            'icon-color': [
+                                'match', // Use the 'match' expression: https://docs.mapbox.com/mapbox-gl-js/style-spec/#expressions-match
+                                ['get', 'status'], // Use the result 'STORE_TYPE' property
+                                STATUS_REBALANCING, '#e31a1c',
+                                STATUS_CRUISING, '#FFEB2A',
+                                STATUS_IDLE, '#081d58',
+                                STATUS_CARRYING + '1', '#1d91c0',
+                                STATUS_CARRYING + '2', '#7fcdbb',
+                                STATUS_CARRYING + '3', '#c7e9b4',
+                                STATUS_CARRYING + '4', '#ffffd9',
+                                '#FFFFFF' // any other store type
+                            ]
+                        }
+                    });
+                });
+
+                // Change the cursor to a pointer when the mouse is over the nodes layer
+                map.on('mouseenter', LAYER_NODES, function () {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+                // Change it back to a pointer when it leaves
+                map.on('mouseleave', LAYER_NODES, function () {
+                    map.getCanvas().style.cursor = '';
+                });
+
+
+                function addNodePopToMap(e) {
+                    var features = map.queryRenderedFeatures(e.point, {
+                        layers: [LAYER_NODES]
+                    });
+
+                    if (!features.length) {
+                        return;
+                    }
+
+                    var feature = features[0];
+                    
+                    //TODO Map is transforming pair in String ("null", "\{\}")
+                    feature.properties.pair = typeof feature.properties.pair === 'object'? feature.properties.pair : (feature.properties.pair === "null" || feature.properties.pair === undefined? null : JSON.parse(feature.properties.pair));
+                    var node = new NodeFactory(feature);
+
+                    var popup = new mapboxgl.Popup({ offset: [0, -15] })
+                        .setLngLat(feature.geometry.coordinates)
+                        .setHTML(node.popup)
+                        .addTo(map);
+                }
+
+                map.on('click', addNodePopToMap);
+
+                // setup the viewport
+                // map.jumpTo({ 'center': fleet[0].origin.coordinates, 'zoom': 13 });
+                // map.setPitch(30);
+
+                fleetSize = fleet.length;
+
+                var dt = new Date(currentDateTimeMs);
+                console.log("Start Time:", dt);
+                var fleetStatusMapObj = new FleetStatusMap(fleetSize, "Fleet", "myDiv");
+                fleetStatusMapObj.createFleetStatusPlot(dt);
+
+
+                var msInterval = 1; // speed / acceleration;
+                var timer = window.setInterval(updateFleetProgress, msInterval);
+                console.log("Timer=%s", timer)
+
+
+
+                slider.oninput = ({ target: { value } }) => {
+                    console.log(value);
+                    output.innerText = value;
+                    clearInterval(timer);
+                    timer = window.setInterval(updateFleetProgress, value);
+                    console.log("Timer=%s", timer);
+                };
+
+                function rand() {
+                    return Math.random();
+                }
+
+                function getStatusList(maxVehicleCapacity) {
+                    let carryingStatuses = [...Array(maxVehicleCapacity).keys()].map(v => STATUS_CARRYING + (v + 1));
+                    return [STATUS_REBALANCING, STATUS_CRUISING, STATUS_IDLE].concat(carryingStatuses);
+                }
+
+                const statusList = getStatusList(maxVehicleCapacity);
+
+                function updateFleetProgress() {
+
+
+                    InputCurrentTime.innerText = getCurrentDateTime();
+
+                    let allVehiclesProcessed = true;
+
+                    let traveledLineString = [];
+                    let visitedPoints = [];
+
+                    // fleetStatus = {}
+
+                    let statusCount = new Map();
+                    statusList.forEach(v => statusCount.set(v, 0));
+
+                    for (let i = 0; i < fleet.length; i++) {
+                        let v = fleet[i];
+
+                        if (v.isStillTravelingJourney()) {
+                            // console.log(v.toString())
+                            //console.log(v.toString() + "==" + v.journey.features.toString())
+                            v.updateProgressUntil(currentDateTimeMs);
+                            //console.log("after:", v.toString())
+                            //fleetStatus[v.status] = (fleetStatus[v.status] || 0) + 1;
+                            allVehiclesProcessed = false;
+                        }
+
+                        // console.log(
+                        //     "status: %s = source: %s -> target: %s",
+                        //     v.status,
+                        //     v.journey.currentPoint.id,
+                        //     v.journey.pair !== null? v.journey.pair.properties.id: null)
+                        // Add paths and nodes for all vehicles (finished and unfinished)
+                        Array.prototype.push.apply(traveledLineString, v.journey.traveledLineStringList);
+                        let visitedPointsOfTypeChecked = v.journey.visitedPoints.filter(p => SelectedNodeTypeSet.has(p.properties.type));
+                        Array.prototype.push.apply(visitedPoints, visitedPointsOfTypeChecked);
+
+                        // Add planned routes (e.g., rebalancing guideline and target)
+                        if (v.isRebalancing()) {
+                            traveledLineString.push(v.journey.rebalancingLineString);
+                            // console.log("# JOURNEY")
+                            // console.log(v.journey.rebalancingTargetPoint.properties.id);
+                            // console.log(v.journey.getLastVisitedPointId());
+
+                            //    console.assert(v.journey.getLastVisitedPointFeature()!=undefined, "Last visited point feature undefined." + v.journey);
+                            visitedPoints.push(v.journey.rebalancingTargetPoint);
+                            //    console.assert(v.journey.rebalancingTargetPoint !=undefined, "rebalancingTargetPoint." + v.journey.rebalancingTargetPoint);
+                            //if (v.journey.rebalancingTargetPoint.properties.id !== v.journey.getLastVisitedPointId()) {   
+                            //if (!pointsAreEqual(v.journey.getLastVisitedPointId(), v.journey.rebalancingTargetPoint)) {
+                            //}    else {
+                            //    console.info("Reached Target!")
+                            //}
+                            //} else {
+                            //console.info("Finished rebalancing!")
+                        }
+
+                        geojsonVehicles.features[i].properties.bearing = v.bearing;
+                        geojsonVehicles.features[i].properties.status = v.status;
+                        statusCount.set(v.status, statusCount.get(v.status) + 1);
+                        geojsonVehicles.features[i].geometry.coordinates = v.journey.currentCoordinate;
+                        //console.log("System=", getCurrentDateTime(), "/ Vehicle=", getDateTimeStringFromDateTime(v.internalDateTime));
+
+                    }
+
+
+
+
+                    // Update map features                        
+                    geojsonRoutes.features = traveledLineString;
+                    geojsonNodes.features = visitedPoints;
+                    map.getSource(LAYER_ROUTES).setData(geojsonRoutes);
+                    map.getSource(LAYER_NODES).setData(geojsonNodes);
+                    map.getSource(LAYER_FLEET).setData(geojsonVehicles);
+
+                    if (allVehiclesProcessed) {
+                        window.clearInterval(timer);
+                    }
+
+                    statusCount.forEach(function (nVehiclesStatus, status) {
+                        fleetStatusMapObj.updateStatusToCount(status, nVehiclesStatus)
+                    });
+
+                    var dt = new Date(currentDateTimeMs);
+                    fleetStatusMapObj.plotFleetStatusAt(dt);
+
+                    currentDateTimeMs += 1_000;
+
+
+
+                }
+            });
+        });
+
+    </script>
+
+</body>
+
+</html>
