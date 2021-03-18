@@ -13,3 +13,8 @@ After installation:
 
 Potential errors:
 * Data can be using specific PORT (2999)
+
+## Screen recording
+
+    Increase speed on Windows Video Editor
+    Convert video to .gif https://ezgif.com/
