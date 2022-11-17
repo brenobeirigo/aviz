@@ -1,7 +1,7 @@
 
 
 function splitLineString(coordinates, numberOfSegments, left = true, right = true) {
-    console.log({ coordinates, numberOfSegments })
+    // console.log({ coordinates, numberOfSegments })
     if (numberOfSegments == 0) {
         console.assert(coordinates.length == 2, coordinates);
         return coordinates;
@@ -16,7 +16,7 @@ function splitLineString(coordinates, numberOfSegments, left = true, right = tru
     let totalDistanceKm = turf.lineDistance(line);
     let lenghSegmentKm = totalDistanceKm / numberOfSegments;
 
-    console.log(`#Coordinates=${line}, #Dist=${totalDistanceKm.toFixed(2)}km, Duration=${numberOfSegments.toFixed(2)}s, Segments=${lenghSegmentKm}`)
+    // console.log(`#Coordinates=${line}, #Dist=${totalDistanceKm.toFixed(2)}km, Duration=${numberOfSegments.toFixed(2)}s, Segments=${lenghSegmentKm}`)
 
     let rectCollection = [];
     for (let nSegments = startCoordinate; nSegments < endCoordinate; nSegments++) {
@@ -25,9 +25,9 @@ function splitLineString(coordinates, numberOfSegments, left = true, right = tru
         rectCollection.push(pointOnLine.geometry.coordinates);
     }
 
-    console.log("Last=", line.geometry.coordinates[line.geometry.coordinates.length - 1]);
-    console.log("Last calc coord=", turf.along(line, numberOfSegments * lenghSegmentKm));
-    console.log("N. coordinates: " + rectCollection.length + " - segments: " + lenghSegmentKm + " - rects: " + numberOfSegments);
+    // console.log("Last=", line.geometry.coordinates[line.geometry.coordinates.length - 1]);
+    // console.log("Last calc coord=", turf.along(line, numberOfSegments * lenghSegmentKm));
+    // console.log("N. coordinates: " + rectCollection.length + " - segments: " + lenghSegmentKm + " - rects: " + numberOfSegments);
 
     return rectCollection;
 }
@@ -85,7 +85,7 @@ class FeatureList {
                 )
 
                 console.assert(f.properties.travel_time >= 0, "ERROR: Travel time <= 0," + f)
-
+                
                 f.geometry.coordinates = splitLineString(
                     f.geometry.coordinates,
                     f.properties.travel_time);

@@ -34,8 +34,10 @@
         <nav id="slider">
             <!-- <div>Simulation speed</div> -->
             <div class="range">
-                <label  style="font-weight: bold; padding-bottom: 5px;" class="form-label"  for="rangeTimer">Simulation speed</label>
-                <input type="range" min="1" max="1000" class="form-range" id="rangeTimer" /> <output hidden id="rangeTarget">1</output>
+                <label style="font-weight: bold; padding-bottom: 5px;" class="form-label" for="rangeTimer">Simulation
+                    speed</label>
+                <input type="range" min="1" max="1000" class="form-range" id="rangeTimer" /> <output hidden
+                    id="rangeTarget">1</output>
             </div>
         </nav>
 
@@ -67,15 +69,15 @@
         var currentDateTimeMs = Date.parse(startTime || "2019-02-20 9:30:00");
 
         var checkedPoints = new Map();
-        checkedPoints.set(POINT_ORIGIN, {checked:true, label:"Origins"});
-        checkedPoints.set(POINT_PICKUP, {checked:false, label:"Pick-ups"});
-        checkedPoints.set(POINT_DROPOFF, {checked:true, label:"Drop-offs"});
-        checkedPoints.set(POINT_WAYPOINT, {checked:true, label:"Waypoints"});
-        checkedPoints.set(POINT_REB_SOURCE, {checked:false, label:"Rebalancing sources"});
-        checkedPoints.set(POINT_REB_TARGET, {checked:true, label:"Rebalancing targets"});
-        
+        checkedPoints.set(POINT_ORIGIN, { checked: false, label: "Origins" });
+        checkedPoints.set(POINT_PICKUP, { checked: false, label: "Pick-ups" });
+        checkedPoints.set(POINT_DROPOFF, { checked: false, label: "Drop-offs" });
+        checkedPoints.set(POINT_WAYPOINT, { checked: false, label: "Waypoints" });
+        checkedPoints.set(POINT_REB_SOURCE, { checked: false, label: "Rebalancing sources" });
+        checkedPoints.set(POINT_REB_TARGET, { checked: true, label: "Rebalancing targets" });
+
         var SelectedNodeTypeSet = new Set();
-        Array.from(checkedPoints).filter(([k,v])=> v.checked===true).map(v=>SelectedNodeTypeSet.add(v[0]));
+        Array.from(checkedPoints).filter(([k, v]) => v.checked === true).map(v => SelectedNodeTypeSet.add(v[0]));
 
 
         //var output = document.getElementById("demo");
@@ -124,7 +126,10 @@
         //var source_gson2 = 'all2.geojson';
         //var source_gson = '2v.json';
         // var source_gson = './data/fleetJourney.json';
-        var source_gson = './data/journeyWithCutoff.json';
+        // var source_gson = './data/journeyWithCutoff.json';
+        var source_gson = './data/journeyWithCutoffNN.json';
+        // Departure time next node LOWER THAN departure time current node
+        // WP->REB_TARGET and suddenly WP->REB_ORIGIN
         // var source_gson = './data/singleVehicleWithCutoff.json';
         // var source_gson = './data/rebTargetError.json';
 
@@ -176,7 +181,7 @@
 
             function createLayerFilters() {
                 for (let [id, showPointCheckObj] of checkedPoints) {
-            
+
                     let divCheck = document.createElement("div");
                     divCheck.className = "form-check form-switch";
                     divCheck.setAttribute("id", "filterNode" + id);
@@ -218,7 +223,7 @@
                     let inputLabel = document.createElement("label");
                     inputLabel.className = "form-check-label";
                     inputLabel.for = "inlineCheckbox" + id;
-                    inputLabel.textContent =  showPointCheckObj.label;
+                    inputLabel.textContent = showPointCheckObj.label;
                     divCheck.appendChild(inputLabel);
 
 
@@ -257,7 +262,7 @@
                 }
             }
 
-            createLayerToggles();
+            // createLayerToggles();
             createLayerFilters();
             // We use D3 to fetch the JSON here so that we can parse and use it separately
             // from GL JS's use in the added source. You can use any request method (library
@@ -269,7 +274,7 @@
                 fleet = [];
 
                 for (let vehicle of routes) {
-                    console.log(vehicle.id);
+                    console.log("Processing vehicle:", vehicle.id);
                     console.log(vehicle.path);
                     let v = new Vehicle(vehicle);
                     //allCoords = v.journey.features.getAllCoordinates()
@@ -283,6 +288,8 @@
 
             }
             d3.json(source_gson, function (err, data) {
+
+                var popup = new mapboxgl.Popup({ offset: [0, -15] });
 
                 fleet = getVehicleListFromData(data);
 
@@ -485,6 +492,38 @@
                 });
 
 
+                // Change the cursor to a pointer when the mouse is over the nodes layer
+                map.on('mouseenter', LAYER_FLEET, function () {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+
+                // Change it back to a pointer when it leaves
+                map.on('mouseleave', LAYER_FLEET, function () {
+                    map.getCanvas().style.cursor = '';
+                });
+
+                function addVehiclePopupMap(e) {
+                    var features = map.queryRenderedFeatures(e.point, {
+                        layers: [LAYER_FLEET]
+                    });
+
+                    if (!features.length) {
+                        return;
+                    }
+
+                    var feature = features[0];
+                    let vehicle = fleet[feature.properties.id];
+                    console.log();
+
+
+                    popup.setLngLat(vehicle.currentCoordinate)
+                        .setHTML(vehicle.popup)
+                        .addTo(map);
+                    popup.vehicle = vehicle;
+
+                }
+
                 function addNodePopToMap(e) {
                     var features = map.queryRenderedFeatures(e.point, {
                         layers: [LAYER_NODES]
@@ -495,18 +534,19 @@
                     }
 
                     var feature = features[0];
-                    
+
                     //TODO Map is transforming pair in String ("null", "\{\}")
-                    feature.properties.pair = typeof feature.properties.pair === 'object'? feature.properties.pair : (feature.properties.pair === "null" || feature.properties.pair === undefined? null : JSON.parse(feature.properties.pair));
+                    feature.properties.pair = typeof feature.properties.pair === 'object' ? feature.properties.pair : (feature.properties.pair === "null" || feature.properties.pair === undefined ? null : JSON.parse(feature.properties.pair));
                     var node = new NodeFactory(feature);
 
-                    var popup = new mapboxgl.Popup({ offset: [0, -15] })
-                        .setLngLat(feature.geometry.coordinates)
+
+                    popup.setLngLat(feature.geometry.coordinates)
                         .setHTML(node.popup)
                         .addTo(map);
                 }
 
-                map.on('click', addNodePopToMap);
+                map.on('click', LAYER_NODES, addNodePopToMap);
+                map.on('click', LAYER_FLEET, addVehiclePopupMap);
 
                 // setup the viewport
                 // map.jumpTo({ 'center': fleet[0].origin.coordinates, 'zoom': 13 });
@@ -630,7 +670,14 @@
                     var dt = new Date(currentDateTimeMs);
                     fleetStatusMapObj.plotFleetStatusAt(dt);
 
+                    // console.log(popup);
+                    if (popup.vehicle){
+                        popup.setLngLat(popup.vehicle.currentCoordinate);
+                        popup.setHTML(popup.vehicle.popup);
+                    }
+
                     currentDateTimeMs += 1_000;
+
 
 
 

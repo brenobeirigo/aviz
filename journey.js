@@ -9,7 +9,15 @@ class Journey {
         this.origin = new NodeFactory(this.features.current);
         this.currentPoint = this.origin;
         this.time = this.currentPoint.elapsedTimeAtPointMillis;
-
+        this.typePointMap = new Map();
+        this.typePointMap.set(POINT_PICKUP, []);
+        this.typePointMap.set(POINT_DROPOFF, []);
+        this.typePointMap.set(POINT_ORIGIN, []);
+        this.typePointMap.set(POINT_REB_SOURCE, []);
+        this.typePointMap.set(POINT_REB_TARGET, []);
+        this.typePointMap.set(POINT_WAYPOINT, []);
+        this.typePointMap.set(POINT_STOP, []);
+        
 
         // Coordinate - previous, current, next used to calculate bearing
         this.previousCoordinate = this.currentPoint.coordinates;
@@ -38,6 +46,7 @@ class Journey {
 
         if (!this.alreadyVisitedCurrentPointId()) {
             this.addFeaturePoint(this.features.current);
+            this.typePointMap.get(this.currentPoint.type).push(this.currentPoint);
             // console.log("NEW POINT:", this.currentPoint.id)
         }
         if (this.currentPoint.stillWaitingAtLocation()) {

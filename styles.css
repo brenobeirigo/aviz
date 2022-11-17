@@ -25,10 +25,10 @@ body {
 
 #myDiv {
     position: absolute;
-    z-index: 1000;
+    z-index: 1;
     width: 50%;
     margin: 0px;
-    height: 25%;
+    height: 30%;
     padding: 0px;
     bottom: 50px;
     left: 50%;
@@ -119,8 +119,8 @@ body {
     background: #fff;
     position: absolute;
     z-index: 1;
-    top: 50%;
-    transform: translate(0, -50%);
+    top: 10px;
+    /* transform: translate(0, -50%); */
     right: 10px;
     border-radius: 3px;
     padding: 5px;
@@ -131,7 +131,7 @@ body {
 }
 
 #slider {
-    top: 70%;
+    top: 200px;
     /* transform: translate(0, -50%); */
     border-radius: 3px;
     background: #fff;
