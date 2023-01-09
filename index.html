@@ -66,6 +66,7 @@
         const queryString = window.location.search;
         const urlParams = new URLSearchParams(queryString);
         const startTime = urlParams.get("start_time");
+        const source_gson = `./data/${urlParams.get("source_gson")}`;
         var currentDateTimeMs = Date.parse(startTime || "2019-02-20 9:30:00");
 
         var checkedPoints = new Map();
@@ -85,7 +86,7 @@
         //12.55 / 40.79605 / -73.95842 / -60.8 / 1
         mapboxgl.accessToken = 'pk.eyJ1IjoiYnJlbm9iZWlyaWdvIiwiYSI6ImNpeHJiMDNidTAwMm0zNHFpcXVzd2UycHgifQ.tWIDAiRhjSzp1Bd40rxaHw';
         var allCoords = [];
-        var map = new mapboxgl.Map({
+        var map = new mapboxgl.Map({    
             container: 'map',
             style: 'mapbox://styles/brenobeirigo/ckkbavtgn17tm17p8y4aad2wy',
             center: [-73.95842, 40.79605],
@@ -127,7 +128,7 @@
         //var source_gson = '2v.json';
         // var source_gson = './data/fleetJourney.json';
         // var source_gson = './data/journeyWithCutoff.json';
-        var source_gson = './data/journeyWithCutoffNN.json';
+        //var source_gson = './data/journeyWithCutoffNN.json';
         // Departure time next node LOWER THAN departure time current node
         // WP->REB_TARGET and suddenly WP->REB_ORIGIN
         // var source_gson = './data/singleVehicleWithCutoff.json';
